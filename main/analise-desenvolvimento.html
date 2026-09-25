@@ -308,7 +308,29 @@ th .cat{font-size:inherit;font-weight:inherit}
 .ia-kv{grid-template-columns:150px 1fr;gap:7px 14px;font-size:13px;line-height:1.5}
 .ia-desc{border-top:1px solid var(--border);padding-top:10px;margin-top:10px}
 .tbl tbody tr.sel td{background:var(--primary-soft)}
-#ia-tbl{table-layout:fixed}#ia-tbl th:nth-child(1){width:36px}#ia-tbl th:nth-child(2){width:32%}#ia-tbl th:nth-child(4){width:104px}#ia-tbl th:nth-child(5){width:52px}#ia-tbl th:nth-child(6){width:86px}
+#ia-tbl{table-layout:fixed}#ia-tbl th:nth-child(1){width:34px}#ia-tbl th:nth-child(3){width:25%}#ia-tbl th:nth-child(4){width:30%}#ia-tbl th:nth-child(5){width:84px}
+.ia-kpis .kpi{min-height:80px;padding:11px 16px}.ia-kpis .kpi-label{margin-bottom:2px}.ia-kpis .kpi-value{font-size:24px}.ia-kpis .kpi-sub{padding-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ia-kpis .kpi-value.txt{font-size:18px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ia-lac{cursor:help;text-decoration:underline dotted}
+.ia-bar{display:flex;align-items:center;gap:8px}.ia-bar i{flex:1;min-width:0}.ia-bar span{display:block;height:10px;background:var(--primary);border-radius:0 4px 4px 0}.ia-bar b{font-weight:600;font-variant-numeric:tabular-nums;min-width:38px;text-align:right}
+.ia-det-hdr{display:flex;gap:10px;align-items:flex-start}.ia-det-hdr h3{margin:0 0 2px}.ia-det-hdr .pg-n{flex:none;margin-top:1px;background:var(--primary-btn);color:#fff}
+.ia-msg{font-size:14px;color:var(--text);margin:8px 0}
+.ia-chips{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ia-bloco{margin-top:14px}.ia-rot{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px}
+.ia-graf{position:relative;height:150px}
+.ia-comp{display:flex;gap:2px;height:14px;margin-bottom:6px}.ia-comp span{border-radius:4px;min-width:4px}
+.ia-met td{height:30px}.ia-met td:first-child{white-space:normal}
+.ia-acao{font-weight:600;color:var(--text-strong);margin-bottom:2px}
+.ia-hip{margin-top:12px;font-size:13px;color:var(--text2)}.ia-hip summary{cursor:pointer;font-weight:600;font-size:12px}.ia-hip div{margin-top:4px}
+.msg-graf{width:560px;max-width:100%;margin:6px 0}.msg-graf figcaption{font-weight:600;font-size:13px;margin-bottom:4px}.msg-graf-c{position:relative}
+.msg-graf details{font-size:12px;margin-top:4px}.msg-graf summary{cursor:pointer;color:var(--text2)}
+.ia-filtros{display:flex;gap:8px;flex:none;flex-wrap:wrap}
+.ia-filtros input,.ia-filtros select,.ia-filtro-tab{background:var(--field);border:1px solid var(--border2);border-radius:var(--r);height:32px;padding:0 10px;font-size:13px;color:var(--text);outline:none}
+.ia-filtros input{flex:1;min-width:160px}.ia-filtros input:focus,.ia-filtros select:focus,.ia-filtro-tab:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--focus-ring)}
+.ia-filtro-tab{height:28px;width:min(240px,100%);margin:4px 0;display:block}
+th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--text)}th[data-dir="asc"]::after{content:" ▲";font-size:10px}th[data-dir="desc"]::after{content:" ▼";font-size:10px}
+.msg th.sortable{white-space:nowrap}
+.msg pre{background:var(--surface);padding:8px;border-radius:6px;overflow:auto;font-size:12px}.msg-graf-wait{font-size:13px;color:var(--text2);margin:6px 0}
 .pill.pok{background:var(--ok-soft);color:var(--ok)}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--primary-line);border-top-color:var(--primary);border-radius:50%;animation:gira .8s linear infinite;vertical-align:-2px;margin-right:8px}
 @keyframes gira{to{transform:rotate(360deg)}}
@@ -409,7 +431,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 </main>
 
 <div id="toasts" aria-live="polite"></div>
-<footer class="wm">Gradus Consultoria · processamento local no navegador; só a aba Insights IA envia dados, agregados e com pessoas pseudonimizadas, à API da Anthropic · <span id="rodape-versao">v1.1.0 · 25/09/2026</span></footer>
+<footer class="wm">Gradus Consultoria · processamento local no navegador; só a aba Insights IA envia dados, agregados e com pessoas pseudonimizadas, à API da Anthropic · <span id="rodape-versao">v1.2.0 · 25/09/2026</span></footer>
 
 <script>'use strict';
 /* Utilitários: formatação PT-BR, datas sem fuso (tudo em componentes UTC),
@@ -1958,7 +1980,7 @@ const UI = (() => {
     trocarProjeto: el => App.trocarProjeto(el.dataset.k), excluirProjeto: el => App.excluirProjeto(el.dataset.k), exportarBackup: () => App.exportarBackup(),
   };
 
-  return { montar, renderTudo, toast, chartAtivo, workbookRecorte, recorte, linhasTabela, rotuloConfig, paginar, linhasQueCabem, htmlControles, nivelClassificacao, PAGINAS };
+  return { montar, renderTudo, toast, chartAtivo, workbookRecorte, recorte, linhasTabela, rotuloConfig, paginar, linhasQueCabem, htmlControles, nivelClassificacao, COR, COR_CAT, PAGINAS };
 })();
 </script>
 <script>'use strict';
@@ -1973,7 +1995,7 @@ const IA = (() => {
   const PROXY_URL = 'https://kfajcfoc4dowtzo5y3phgizeky0gojqt.lambda-url.us-east-1.on.aws';
   const MODELO = 'claude-opus-5-5', NOME_MODELO = 'Claude Opus 5.5';
   const esc = U.esc;
-  const S = { gerando: null, sel: 0, verDescartados: false, chat: [], chatApi: [], chatAssinatura: null, chatSistema: '', respondendo: null, rascunho: '', projetoId: null };
+  const S = { gerando: null, selP: null, filtro: { q: '', tipo: '', conf: '' }, ordem: { col: 'prioridade', dir: 1 }, verDescartados: false, chat: [], chatApi: [], chatAssinatura: null, chatSistema: '', respondendo: null, rascunho: '', projetoId: null };
   const nomeModelo = id => id === MODELO ? NOME_MODELO : id;
   const r1 = v => U.ok(v) ? Math.round(v * 10) / 10 : null, r3 = v => U.ok(v) ? Math.round(v * 1000) / 1000 : null;
   const perMeses = ms => ms.length ? (ms.length === 1 ? U.fmtMes(ms[0]) : `${U.fmtMes(ms[0])}–${U.fmtMes(ms[ms.length - 1])}`) : '—';
@@ -2042,44 +2064,57 @@ I. Capacidade ociosa: cadastrados vigentes com zero entrega em meses completos.
 Ordene por: ganho conservador em h/mês (maior primeiro) × confiança, desempatando pela
 facilidade da ação. Retorne no máximo 10 insights; prefira 5 bons a 10 fracos.
 
-## Estilo
-Português do Brasil, frases curtas, termos do app (régua, h/mês·dev, detratores, recorte).
-Números no formato pt-BR (1.234,5). Responda SOMENTE com o JSON do esquema pedido.`;
+## Estilo (a tela mostra os números em tabelas e gráficos; o texto só dá a mensagem)
+- Português do Brasil, termos do app (régua, h/mês·dev, detratores, recorte). Números no formato pt-BR (1.234,5).
+- Seja telegráfico. mensagem_principal: até 25 palavras. titulo: até 8. mensagem: até 20. hipóteses, acao e
+  dado_para_confirmar: até 15 cada. motivo_confianca: até 10. lacunas_de_dados: no máximo 3, até 12 palavras cada.
+- A evidência vai em "metricas": 2 a 4 valores copiados exatamente da entrada (mesma unidade; frações continuam
+  frações), cada um com o nome do campo de origem e um rótulo de até 4 palavras. Não repita esses números no texto.
+- Responda SOMENTE com o JSON do esquema pedido.`;
 
   const SISTEMA_CHAT = BASE + `
 
 ## Nesta conversa
-Você conversa com um consultor da Gradus dentro da aplicação "Análise de desenvolvimento". O recorte que
-ele está vendo vem abaixo em <recorte>, e os insights já gerados para ele (se houver) em <insights_gerados>.
-- Responda em português do Brasil, direto ao ponto: primeiro a resposta, depois o porquê. Use markdown simples
-  (negrito, listas curtas, tabela pequena quando comparar grupos). Números no formato pt-BR (1.234,5).
-- Cite os números do recorte com o nome do campo quando ajudar a rastrear. Se a pergunta pedir algo que não
-  está no recorte (commits individuais, MRs, revisões, nomes de pessoas), diga que não está nos dados enviados
-  e sugira como obter ou que filtro aplicar na aplicação.
-- Você só conhece pseudônimos (P-0001); nunca tente inferir quem é a pessoa.
-- As mesmas regras invioláveis valem aqui: nada de ranquear pessoas ou falar em desempenho individual.`;
+Você conversa com um consultor da Gradus dentro da aplicação "Análise de desenvolvimento". O recorte que ele vê
+está em <recorte>; os insights já gerados, se houver, em <insights_gerados>.
+- Seja breve: abra com a resposta em uma frase curta, em negrito. Depois, no máximo 3 tópicos curtos. Nada de
+  parágrafos longos: até 80 palavras de texto por resposta.
+- Mostre números em tabela ou gráfico, não em frases. Tabela markdown para até 6 linhas; gráfico quando houver
+  série mensal ou comparação de 3 ou mais grupos.
+- Para um gráfico, escreva um bloco de código com a linguagem "grafico" contendo só este JSON (a aplicação desenha):
+\`\`\`grafico
+{"tipo": "barra", "titulo": "até 8 palavras", "unidade": "h/mês·dev", "rotulos": ["jan/26", "fev/26"], "series": [{"nome": "Exemplo S.A.", "valores": [30.1, 32.4]}]}
+\`\`\`
+  "tipo" é "barra", "barra_horizontal" ou "linha" (linha só para meses). No máximo 1 gráfico por resposta, até 3
+  séries e 12 rótulos, uma única unidade, valores copiados do recorte. No JSON, números com ponto decimal.
+- Se a pergunta pedir algo fora do recorte (commits, MRs, revisões, nomes), diga isso em uma frase e sugira o filtro
+  ou a fonte.
+- Você só conhece pseudônimos (P-0001); nunca tente inferir quem é a pessoa. Nada de ranquear pessoas.`;
 
   const SCHEMA = (() => {
     const nulo = t => ({ anyOf: [{ type: t }, { type: 'null' }] });
     const obj = (props, extra = {}) => ({ type: 'object', properties: props, required: Object.keys(props), additionalProperties: false, ...extra });
+    const txt = d => ({ type: 'string', description: d });
     return obj({
-      resumo_executivo: { type: 'string', description: 'até 3 frases com o maior gap e o ganho total conservador sem sobreposição' },
+      mensagem_principal: txt('uma frase, até 25 palavras: o maior gap e o ganho total conservador sem sobreposição'),
       insights: { type: 'array', items: obj({
         prioridade: { type: 'integer' },
         tipo: { type: 'string', enum: ['nivel', 'tendencia', 'dispersao', 'concentracao', 'retrabalho', 'tamanho_risco', 'fluxo_mr', 'revisao', 'capacidade_ociosa', 'qualidade_de_dado'] },
         recorte: obj({ nivel: { type: 'string' }, nome: { type: 'string' } }),
-        titulo: { type: 'string', description: 'frase curta do gap' },
-        evidencia: { type: 'string', description: 'números da entrada que sustentam o gap, com os campos de origem' },
-        hipotese_causa: { type: 'string' },
-        hipotese_alternativa: { type: 'string', description: 'explicação sem perda de produtividade' },
+        titulo: txt('até 8 palavras'),
+        mensagem: txt('uma frase, até 20 palavras: o que os números mostram'),
+        metricas: { type: 'array', description: '2 a 4 valores copiados exatamente da entrada', items: obj({ campo: txt('nome do campo na entrada'), rotulo: txt('até 4 palavras'), valor: { type: 'number' } }) },
+        hipotese_causa: txt('até 15 palavras'),
+        hipotese_alternativa: txt('até 15 palavras: explicação sem perda de produtividade'),
         ganho_h_mes: { anyOf: [obj({ conservador: nulo('number'), potencial: nulo('number'), fte_equivalente: nulo('number') }), { type: 'null' }] },
         sobreposicao_com: { type: 'array', items: { type: 'integer' } },
-        acao_recomendada: { type: 'string', description: 'ação concreta, com dono sugerido (tech lead, PO, gestão)' },
-        dado_para_confirmar: { type: 'string' },
+        acao: txt('até 15 palavras, verbo no infinitivo'),
+        dono: { type: 'string', enum: ['tech lead', 'PO', 'gestão', 'RH / cadastro', 'consultoria'] },
+        dado_para_confirmar: txt('até 15 palavras'),
         confianca: { type: 'string', enum: ['alta', 'media', 'baixa'] },
-        motivo_confianca: { type: 'string' },
+        motivo_confianca: txt('até 10 palavras'),
       }) },
-      lacunas_de_dados: { type: 'array', items: { type: 'string' } },
+      lacunas_de_dados: { type: 'array', items: txt('até 12 palavras') },
     });
   })();
 
@@ -2103,6 +2138,7 @@ ele está vendo vem abaixo em <recorte>, e os insights já gerados para ele (se 
     const rp = porPessoa(R.rowsUniv), rpSP = porPessoa(R.rowsUnivSP);
     const valDev = (rows, un) => { const liq = new Map(), devs = new Map(); rows.forEach(r => liq.set(r.ym, (liq.get(r.ym) || 0) + r.horasLiq));
       return y => { if (!devs.has(y)) devs.set(y, Calc.devsDoMes(ctx, rows, un, y, status).size); return { num: liq.get(y) || 0, den: devs.get(y) }; }; };
+    const idsGrupo = new Map();
     function grupo(nv, nome, gids) {
       const set = new Set(gids), rows = gids.flatMap(id => rp.get(id) || []), rowsSP = gids.flatMap(id => rpSP.get(id) || []);
       const cl = gids.map(id => [id, R.cls.pessoas.get(id)]).filter(([, c]) => c);
@@ -2117,6 +2153,7 @@ ele está vendo vem abaixo em <recorte>, e os insights já gerados para ele (se 
       const detr = cl.filter(([, c]) => c.categoria === 'detrator');
       const cons = detr.reduce((a, [, c]) => a + Math.max(0, lim.det * c.regua - c.valor), 0);
       const pot = hmd !== null && reguaMedia !== null ? Math.max(0, (reguaMedia - hmd) * gids.length) : null;
+      idsGrupo.set(`${nv}|${nome}`, { ids: gids, regua: reguaMedia });
       return { nivel: nv, nome, pessoas: gids.length, h_mes_dev: r1(hmd),
         regua_min: r1(reguas.length ? Math.min(...reguas) : null), regua_max: r1(reguas.length ? Math.max(...reguas) : null), regua_do_universo: cl.some(([, c]) => c.base === 'universo'),
         detratores: cont.detrator, neutros: cont.neutro, impulsionadores: cont.impulsionador, sem_regua: cont.semRegua,
@@ -2158,14 +2195,14 @@ ele está vendo vem abaixo em <recorte>, e os insights já gerados para ele (se 
     };
     const fil = [['empresa', f.empresa], ['tribo', f.tribo], ['squad', f.squad], ['repositório', f.repos], ['stack', f.stacks], ['senioridade', f.senioridade], ['natureza', f.natureza]].filter(([, v]) => v && v.length).map(([k, v]) => `${k}: ${v.join(', ')}`);
     const desc = `${perMeses(meses)} · ${fil.join('; ') || 'sem filtros'} · ${U.fmtInt(ids.length)} pessoas`;
-    return { payload, assinatura: hash(JSON.stringify(payload)), nomes, desc };
+    return { payload, assinatura: hash(JSON.stringify(payload)), nomes, desc, idsGrupo };
   }
   function mensagemDados(payload) {
     return `Analise o recorte abaixo e devolva os principais gaps de produtividade.
 
 Observações da aplicação:
 - ganho_conservador_h_mes, ganho_potencial_h_mes e fte_equivalente de cada grupo já foram calculados pela aplicação com as fórmulas da instrução; use-os em vez de recalcular. Os grupos de níveis diferentes se sobrepõem (um squad está contido na sua tribo ou empresa): não some ganhos entre eles no resumo.
-- Em "evidencia", cite só números que aparecem literalmente na entrada, com o campo de origem, sem calcular diferenças. A aplicação confere cada número e descarta o insight que citar valor ausente.
+- Em "metricas", copie os valores exatamente como estão na entrada, sem calcular diferenças. A aplicação confere cada valor (e os números do texto) e descarta o insight com valor ausente.
 - "fluxo_mr" e "revisoes" são nulos: os dados atuais só têm commits.
 - Proporções (campos _pct, share, variacao, razao_regua, limiares) estão em fração decimal: 0,12 = 12%.
 - h_mes_dev de um grupo é a média da produtividade das pessoas do grupo (h/mês); nos totais e na série mensal é horas do mês ÷ desenvolvedores do mês.
@@ -2195,7 +2232,9 @@ ${JSON.stringify(payload, null, 1)}
   function validar(obj, payload) {
     const vals = valoresDe(payload), validos = [], descartados = [];
     for (const ins of (obj.insights || [])) {
-      const falhas = numerosTexto(ins.evidencia).filter(n => !bate(n, vals));
+      const falhas = [...(ins.metricas || []).map(m => m.valor).filter(v => U.ok(v) && !bate(Math.abs(v), vals)),
+        ...numerosTexto(`${ins.titulo || ''} ${ins.mensagem || ''} ${ins.evidencia || ''}`).filter(n => !bate(n, vals))];
+      if (!(ins.metricas || []).length && !ins.evidencia) falhas.push('sem métricas');
       const g = ins.ganho_h_mes; if (g && U.ok(g.conservador) && !bate(Math.abs(g.conservador), vals)) falhas.push(g.conservador);
       (falhas.length ? descartados : validos).push(falhas.length ? { ...ins, _falhas: falhas } : ins);
     }
@@ -2250,8 +2289,8 @@ ${JSON.stringify(payload, null, 1)}
       let obj; try { obj = JSON.parse(msg.content.filter(b => b.type === 'text').map(b => b.text).join('')); } catch (e) { throw new Error('a resposta não veio no formato esperado (JSON inválido).'); }
       const { validos, descartados } = validar(obj, X.payload);
       guardar({ assinatura: X.assinatura, desc: X.desc, geradoEm: U.hojeISO(), modelo: MODELO, uso: { entrada: msg.usage.input_tokens, saida: msg.usage.output_tokens },
-        resumo: obj.resumo_executivo || '', validos, descartados, lacunas: obj.lacunas_de_dados || [], total: (obj.insights || []).length });
-      S.sel = 0; S.verDescartados = false; App.pag = App.pag || {}; App.pag['ia-ins'] = 1;
+        resumo: obj.mensagem_principal || obj.resumo_executivo || '', validos, descartados, lacunas: obj.lacunas_de_dados || [], total: (obj.insights || []).length });
+      S.selP = null; S.filtro = { q: '', tipo: '', conf: '' }; S.ordem = { col: 'prioridade', dir: 1 }; S.verDescartados = false; App.pag = App.pag || {}; App.pag['ia-ins'] = 1;
       UI.toast(`Insights gerados: ${validos.length} conferido(s)${descartados.length ? `, ${descartados.length} descartado(s) por citar número fora do recorte` : ''}.`, 'ok');
     } catch (e) { if (!S.gerando.cancelado) UI.toast(msgErro(e), 'erro', 0); }
     finally { clearInterval(S.gerando.timer); S.gerando = null; UI.renderTudo(); }
@@ -2272,7 +2311,7 @@ ${JSON.stringify(payload, null, 1)}
     S.chat.push({ role: 'user', text: texto }); S.chatApi.push({ role: 'user', content: texto });
     const bolha = { role: 'assistant', text: '' }; S.chat.push(bolha); S.rascunho = '';
     S.respondendo = { stream: null, parado: false }; UI.renderTudo();
-    const pintar = () => { const el = U.el('ia-atual'); if (el) { el.innerHTML = bolha.text ? md(bolha.text, X.nomes) : '<span class="spin"></span>pensando…'; const c = U.el('ia-chat'); if (c) c.scrollTop = c.scrollHeight; } };
+    const pintar = () => { const el = U.el('ia-atual'); if (el) { el.innerHTML = bolha.text ? md(bolha.text, X.nomes) : '<span class="spin"></span>pensando…'; desenharGraficos(el); ativarTabelas(el); const c = U.el('ia-chat'); if (c) c.scrollTop = c.scrollHeight; } };
     try {
       const client = await cliente();
       const stream = client.messages.stream({
@@ -2301,15 +2340,22 @@ ${JSON.stringify(payload, null, 1)}
     while (i < L.length) {
       const l = L[i];
       if (!l.trim()) { i++; continue; }
+      if (/^\s*```/.test(l)) {
+        const lang = l.trim().slice(3).trim().toLowerCase(), corpo = []; i++;
+        while (i < L.length && !/^\s*```/.test(L[i])) corpo.push(L[i++]);
+        const fechado = i < L.length; if (fechado) i++;
+        html += lang === 'grafico' ? (fechado ? blocoGrafico(corpo.join('\n')) : '<div class="msg-graf-wait"><span class="spin"></span>montando gráfico…</div>') : `<pre><code>${esc(corpo.join('\n'))}</code></pre>`;
+        continue;
+      }
       if (ehTab(l) && i + 1 < L.length && /^\s*\|?[\s:-]+\|[\s|:-]*$/.test(L[i + 1])) {
         const cel = x => x.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim()), cab = cel(l), corpo = []; i += 2;
         while (i < L.length && ehTab(L[i])) corpo.push(cel(L[i++]));
-        html += `<table><thead><tr>${cab.map(c => `<th>${il(c)}</th>`).join('')}</tr></thead><tbody>${corpo.map(r => `<tr>${r.map(c => `<td>${il(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`; continue;
+        html += `<table class="ia-int"><thead><tr>${cab.map(c => `<th>${il(c)}</th>`).join('')}</tr></thead><tbody>${corpo.map(r => `<tr>${r.map(c => `<td>${il(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`; continue;
       }
       if (/^#{1,6}\s/.test(l)) { html += `<p class="msg-h">${il(l.replace(/^#+\s*/, ''))}</p>`; i++; continue; }
       if (/^\s*[-*•]\s+/.test(l)) { const it = []; while (i < L.length && /^\s*[-*•]\s+/.test(L[i])) it.push(L[i++].replace(/^\s*[-*•]\s+/, '')); html += `<ul>${it.map(x => `<li>${il(x)}</li>`).join('')}</ul>`; continue; }
       if (/^\s*\d+[.)]\s+/.test(l)) { const it = []; while (i < L.length && /^\s*\d+[.)]\s+/.test(L[i])) it.push(L[i++].replace(/^\s*\d+[.)]\s+/, '')); html += `<ol>${it.map(x => `<li>${il(x)}</li>`).join('')}</ol>`; continue; }
-      const par = []; while (i < L.length && L[i].trim() && !/^(#{1,6}\s|\s*[-*•]\s+|\s*\d+[.)]\s+|\s*\|)/.test(L[i])) par.push(L[i++]);
+      const par = []; while (i < L.length && L[i].trim() && !/^(#{1,6}\s|\s*[-*•]\s+|\s*\d+[.)]\s+|\s*\||\s*```)/.test(L[i])) par.push(L[i++]);
       if (!par.length) par.push(L[i++]);
       html += `<p>${par.map(il).join('<br>')}</p>`;
     }
@@ -2321,86 +2367,212 @@ ${JSON.stringify(payload, null, 1)}
   const confPill = c => `<span class="pill ${c === 'alta' ? 'pok' : c === 'media' ? 'pa' : 'pg'}">${c === 'media' ? 'média' : esc(c || '—')}</span>`;
   const ROT_TIPO = { nivel: 'Nível', tendencia: 'Tendência', dispersao: 'Dispersão', concentracao: 'Concentração', retrabalho: 'Retrabalho', tamanho_risco: 'Tamanho e risco', fluxo_mr: 'Fluxo de MR', revisao: 'Revisão', capacidade_ociosa: 'Capacidade ociosa', qualidade_de_dado: 'Qualidade de dado' };
   const fmtG = v => U.ok(v) ? U.fmtNum(v, 1) : '—';
+  const fmtFalha = n => typeof n === 'number' ? U.fmtNum(n, 1) : esc(n);
+
+  /* séries categóricas conferidas com o validador de paleta (claro e escuro); texto sempre em tinta neutra */
+  const PALETA = () => document.documentElement.dataset.theme === 'dark' ? ['#4C8FDB', '#C8801F', '#9A70D8'] : ['#296DB7', '#E68E18', '#8B5BC7'];
+  const graficos = [];
+  function novoGrafico(canvas, cfg) {
+    for (let i = graficos.length - 1; i >= 0; i--) if (!graficos[i].canvas || !graficos[i].canvas.isConnected) { try { graficos[i].destroy(); } catch (e) { /* já destruído */ } graficos.splice(i, 1); }
+    if (!window.Chart || !canvas) return null;
+    const c = new Chart(canvas, cfg); graficos.push(c); return c;
+  }
+  const eixos = horizontal => { const val = { beginAtZero: true, grid: { color: UI.COR.grade, drawTicks: false }, border: { display: false }, ticks: { color: UI.COR.texto, padding: 6, callback: v => U.fmtNum(v, 0) } }, cat = { grid: { display: false }, border: { display: false }, ticks: { color: UI.COR.texto, callback(v) { const l = String(this.getLabelForValue(v)); return l.length > 24 ? l.slice(0, 23) + '…' : l; } } };
+    return horizontal ? { x: val, y: cat } : { x: cat, y: val }; };
+  const dica = fmt => ({ backgroundColor: UI.COR.tooltip, padding: 10, cornerRadius: 8, callbacks: { label: c => `${c.dataset.label}: ${fmt(c.raw)}` } });
+
+  /* ganho total sem dupla contagem: gap que se sobrepõe a outro já somado não entra */
+  function consolidar(r) {
+    const ord = r.validos.slice().sort((a, b) => a.prioridade - b.prioridade), somados = new Set(); let cons = 0, fte = 0;
+    for (const ins of ord) { const g = ins.ganho_h_mes; if (!g || !U.ok(g.conservador) || (ins.sobreposicao_com || []).some(n => somados.has(n))) continue; cons += g.conservador; fte += g.fte_equivalente || 0; somados.add(ins.prioridade); }
+    const maior = ord.filter(i => i.ganho_h_mes && U.ok(i.ganho_h_mes.conservador)).sort((a, b) => b.ganho_h_mes.conservador - a.ganho_h_mes.conservador)[0];
+    return { cons, fte, maior, alta: ord.filter(i => i.confianca === 'alta').length };
+  }
+  function htmlKpis(r) {
+    const c = consolidar(r), tile = (rot, val, sub, cls = '') => `<div class="kpi"><div class="kpi-label"><span>${rot}</span></div><div class="kpi-value ${cls}">${val}</div><div class="kpi-sub">${sub}</div></div>`;
+    return `<div class="kpi-strip ia-kpis">${tile('Ganho conservador', `${fmtG(c.cons)}<span class="kpi-un"> h/mês</span>`, 'soma sem gaps sobrepostos')}
+      ${tile('Equivale a', `${fmtG(c.fte)}<span class="kpi-un"> FTE</span>`, 'ganho ÷ régua de cada grupo')}
+      ${tile('Gaps', U.fmtInt(r.validos.length), `${U.fmtInt(c.alta)} com confiança alta${r.descartados.length ? ` · ${U.fmtInt(r.descartados.length)} descartado(s)` : ''}`)}
+      ${tile('Maior gap', c.maior ? esc(c.maior.recorte.nome) : '—', c.maior ? `${fmtG(c.maior.ganho_h_mes.conservador)} h/mês · ${esc(c.maior.titulo)}` : 'nenhum gap quantificado', 'txt')}</div>`;
+  }
 
   function render() {
     const sec = U.el('sec-ia');
-    if (S.projetoId !== App.projeto.id) { S.projetoId = App.projeto.id; if (!S.respondendo) novaConversa(); S.sel = 0; }
+    if (S.projetoId !== App.projeto.id) { S.projetoId = App.projeto.id; if (!S.respondendo) novaConversa(); S.selP = null; }
     if (!App.ctx.rows.length) {
-      sec.innerHTML = `<div class="empty"><h2>Importe o Excel do motor para usar os insights de IA</h2><p>O assistente analisa o recorte que a aplicação calcula. Sem dados importados não há o que analisar.</p>
+      sec.innerHTML = `<div class="empty"><h2>Importe o Excel do motor para usar os insights</h2>
         <div class="acts"><button class="btn p" data-click="irImportar">Importar resultado</button><button class="btn s" data-click="demo">Carregar dados demonstrativos</button></div></div>`;
       return;
     }
     const X = recorteIA(), pg = Math.min(2, Math.max(1, App.pagina.ia || 1));
     sec.innerHTML = `<div class="pagina">${UI.htmlControles(X.R)}${pg === 1 ? htmlInsights(X) : htmlChat(X)}</div>`;
-    if (pg === 1) preencherInsights(X); else { const c = U.el('ia-chat'); if (c) c.scrollTop = c.scrollHeight; const t = U.el('ia-pergunta'); if (t && !S.respondendo && document.activeElement === document.body) t.focus(); }
+    if (pg === 1) preencherInsights(X);
+    else { const c = U.el('ia-chat'); if (c) { desenharGraficos(c); ativarTabelas(c); c.scrollTop = c.scrollHeight; } const t = U.el('ia-pergunta'); if (t && !S.respondendo && document.activeElement === document.body) t.focus(); }
   }
 
   function htmlInsights(X) {
-    const r = resultadoPara(X.assinatura), ult = !r && App.projeto.ia && App.projeto.ia.ultimo, res = r || ult, g = S.gerando, demo = App.projeto.fontes.some(f => f.demo);
-    const sub = res ? `gerado em ${U.fmtDataHora(res.geradoEm)} · ${nomeModelo(res.modelo)} · ${res.validos.length} de ${res.total} insight(s) com os números conferidos no recorte${res.uso ? ` · ${U.fmtInt(res.uso.entrada)} tokens de entrada e ${U.fmtInt(res.uso.saida)} de saída` : ''}`
-      : `principais gaps do recorte e ganho estimado · ${NOME_MODELO} recebe só agregados, com as pessoas pseudonimizadas; o filtro "Pessoa em análise" não se aplica aqui`;
+    const r = resultadoPara(X.assinatura), ult = !r && App.projeto.ia && App.projeto.ia.ultimo, res = g0(r || ult), g = S.gerando, demo = App.projeto.fontes.some(f => f.demo), ok = res && !g;
     const tools = `${g ? '<button class="btn s xs" data-click="ia" data-op="cancelar">Cancelar</button>' : `<button class="btn p xs" data-click="ia" data-op="gerar">${r ? '↻ Gerar de novo' : '✦ Gerar insights'}</button>`}
-      <button class="btn s xs" data-click="ia" data-op="exportar" ${res && !g ? '' : 'disabled'}>Exportar Excel</button>`;
+      <button class="btn s xs" data-click="ia" data-op="exportar" ${ok ? '' : 'disabled'}>Exportar Excel</button>`;
+    const sub = ok ? `${ult ? '<span class="pill pa">gerado para outro recorte</span> ' : ''}${esc(U.fmtDataHora(res.geradoEm))} · ${esc(nomeModelo(res.modelo))}${res.lacunas.length ? ` · <span class="ia-lac" title="${esc(res.lacunas.join('\n'))}">ⓘ ${res.lacunas.length} lacuna(s) de dados</span>` : ''}`
+      : `${esc(NOME_MODELO)} · só agregados, pessoas pseudonimizadas`;
     let corpo;
-    if (g) corpo = `<div class="empty"><h2><span class="spin"></span>Analisando o recorte…</h2><p id="ia-prog">${esc(progTxt())}</p><p class="mini">O modelo raciocina antes de responder; em recortes grandes pode levar alguns minutos.</p></div>`;
-    else if (!res) corpo = `<div class="empty"><h2>Nenhum insight para este recorte ainda</h2><p>O assistente percorre nível, tendência, dispersão, concentração, retrabalho, tamanho e risco, capacidade ociosa e qualidade de dado, e devolve até 10 gaps priorizados pelo ganho conservador. Cada número citado é conferido contra o recorte enviado.</p>
-      <div class="acts"><button class="btn p" data-click="ia" data-op="gerar">✦ Gerar insights</button></div>${demo ? '<p class="mini" style="margin-top:12px">Projeto com dados demonstrativos: os insights serão sobre dados sintéticos.</p>' : ''}</div>`;
-    else corpo = `${ult ? `<div class="note box warn" style="margin:0;flex:none">Estes insights foram gerados para outro recorte (${esc(res.desc)}). O recorte atual é ${esc(X.desc)}: clique em <b>Gerar insights</b> para atualizar.</div>` : ''}
-      <div class="note box ia-resumo"><b>Resumo.</b> ${inline(res.resumo, X.nomes)}${res.lacunas.length ? `<div class="mini" style="margin-top:4px"><b>Lacunas de dados:</b> ${res.lacunas.map(x => inline(x, X.nomes)).join(' · ')}</div>` : ''}</div>
-      <div class="ia-grid"><div class="fill-col"><div class="tbl-wrap fill" id="ia-wrap"><table class="tbl compacta" id="ia-tbl"><thead><tr><th class="num">#</th><th>Recorte</th><th>Gap</th><th class="num" title="ganho conservador · ganho potencial, em h/mês">Ganho h/mês</th><th class="num" title="ganho conservador ÷ régua do grupo">FTE</th><th>Confiança</th></tr></thead><tbody></tbody></table></div>
-        <div class="pag-slot" id="ia-pag"></div>${res.descartados.length ? `<button class="btn-link" data-click="ia" data-op="descartados" style="align-self:flex-start">${S.verDescartados ? 'Voltar ao insight selecionado' : `${res.descartados.length} insight(s) descartado(s) na conferência dos números · ver`}</button>` : ''}</div>
+    if (g) corpo = `<div class="empty"><h2><span class="spin"></span>Analisando o recorte…</h2><p id="ia-prog">${esc(progTxt())}</p></div>`;
+    else if (!res) corpo = `<div class="empty"><h2>Gaps de produtividade do recorte</h2><p>Até 10 gaps, priorizados pelo ganho, com cada número conferido.</p>
+      <div class="acts"><button class="btn p" data-click="ia" data-op="gerar">✦ Gerar insights</button></div>${demo ? '<p class="mini" style="margin-top:10px">Dados demonstrativos (sintéticos).</p>' : ''}</div>`;
+    else corpo = `<div class="ia-grid"><div class="fill-col"><div class="ia-filtros"><input type="search" data-input="ia" data-op="filtroQ" placeholder="Filtrar gap ou recorte…" value="${esc(S.filtro.q)}" aria-label="Filtrar insights">
+        <select data-act="ia" data-op="filtroTipo" aria-label="Tipo"><option value="">Todos os tipos</option>${[...new Set(res.validos.map(i => i.tipo))].map(k => `<option value="${esc(k)}" ${S.filtro.tipo === k ? 'selected' : ''}>${esc(ROT_TIPO[k] || k)}</option>`).join('')}</select>
+        <select data-act="ia" data-op="filtroConf" aria-label="Confiança"><option value="">Qualquer confiança</option>${[['alta', 'alta'], ['media', 'média'], ['baixa', 'baixa']].map(([k, r]) => `<option value="${k}" ${S.filtro.conf === k ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+        <div class="tbl-wrap fill" id="ia-wrap"><table class="tbl compacta" id="ia-tbl"><thead></thead><tbody></tbody></table></div>
+        <div class="pag-slot" id="ia-pag"></div>${res.descartados.length ? `<button class="btn-link" data-click="ia" data-op="descartados" style="align-self:flex-start">${S.verDescartados ? '← voltar' : `${res.descartados.length} descartado(s) na conferência`}</button>` : ''}</div>
         <div class="ia-det" id="ia-det"></div></div>`;
-    return `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Insights de produtividade</div><div class="card-sub">${esc(sub)}</div></div><div class="card-tools">${tools}</div></div><div class="card-body">${corpo}</div></div>`;
+    return `${ok ? htmlKpis(res) : ''}<div class="card fill"><div class="card-hdr"><div><div class="card-title">${ok ? inline(res.resumo, X.nomes) : 'Insights de produtividade'}</div><div class="card-sub">${sub}</div></div><div class="card-tools">${tools}</div></div><div class="card-body">${corpo}</div></div>`;
   }
+  const g0 = r => r && { ...r, lacunas: r.lacunas || [], descartados: r.descartados || [], validos: r.validos || [] };
 
-  function detalheHtml(ins, nomes) {
-    const g = ins.ganho_h_mes, t = s => inline(s || '—', nomes);
-    return `<div class="mini">${esc(ROT_TIPO[ins.tipo] || ins.tipo || '')} · ${esc(rotRecorte(ins.recorte))}</div><h3>${esc(ins.prioridade)}. ${esc(ins.titulo)}</h3>
-      <dl class="kv ia-kv"><dt>Evidência</dt><dd>${t(ins.evidencia)}</dd><dt>Causa provável</dt><dd>${t(ins.hipotese_causa)}</dd><dt>Explicação alternativa</dt><dd>${t(ins.hipotese_alternativa)}</dd>
-      <dt>Ação recomendada</dt><dd>${t(ins.acao_recomendada)}</dd><dt>Confirmar antes de agir</dt><dd>${t(ins.dado_para_confirmar)}</dd>
-      <dt>Ganho</dt><dd>${g ? `conservador <b>${fmtG(g.conservador)} h/mês</b> · potencial ${fmtG(g.potencial)} h/mês · ${fmtG(g.fte_equivalente)} FTE` : 'qualitativo (sem dado de horas associado)'}</dd>
-      <dt>Confiança</dt><dd>${confPill(ins.confianca)} ${t(ins.motivo_confianca)}</dd>${(ins.sobreposicao_com || []).length ? `<dt>Sobrepõe</dt><dd>insight(s) ${ins.sobreposicao_com.map(n => '#' + n).join(', ')}: não somar os ganhos</dd>` : ''}
-      ${ins._falhas ? `<dt>Descartado</dt><dd class="neg">números sem correspondência no recorte: ${ins._falhas.map(n => U.fmtNum(n, 1)).join(', ')}</dd>` : ''}</dl>`;
+  function metricaFmt(m) {
+    const c = String(m.campo || ''), v = m.valor; if (!U.ok(v)) return '—';
+    if (/pct|share|variacao|razao|limiar/.test(c) && Math.abs(v) <= 10) return U.fmtPct(v, 1, /variacao/.test(c));
+    if (/fte/.test(c)) return `${U.fmtNum(v, 1)} FTE`;
+    if (/h_mes|regua|ganho|mediana|p25|p75/.test(c)) return `${U.fmtNum(v, 1)} h/mês`;
+    return Number.isInteger(v) ? U.fmtInt(v) : U.fmtNum(v, 1);
+  }
+  function grupoDe(X, rec) {
+    if (!rec) return null;
+    const dados = X.payload.grupos.find(g => g.nivel === rec.nivel && g.nome === rec.nome) || (rec.nivel === 'universo' && X.payload.grupos[0].nivel === 'universo' ? X.payload.grupos[0] : null);
+    return dados ? { dados, ids: X.idsGrupo.get(`${dados.nivel}|${dados.nome}`) } : null;
+  }
+  const ROT_CAT = { detrator: 'detratores', neutro: 'neutros', impulsionador: 'impulsionadores', semRegua: 'sem régua' };
+  function detalheHtml(ins, X, comGraficos) {
+    const g = ins.ganho_h_mes, grp = grupoDe(X, ins.recorte), d = grp && grp.dados, t = s => inline(s || '—', X.nomes);
+    const comp = d ? [['detrator', d.detratores], ['neutro', d.neutros], ['impulsionador', d.impulsionadores], ['semRegua', d.sem_regua]].filter(([, n]) => n > 0) : [];
+    const tot = comp.reduce((a, [, n]) => a + n, 0), corCat = k => k === 'semRegua' ? UI.COR.clara : UI.COR_CAT[k];
+    const met = ins.metricas || [];
+    return `<div class="ia-det-hdr"><span class="pg-n">${esc(ins.prioridade)}</span><div><h3>${esc(ins.titulo)}</h3><div class="mini">${esc(ROT_TIPO[ins.tipo] || ins.tipo || '')} · ${esc(rotRecorte(ins.recorte))}</div></div></div>
+      ${ins.mensagem ? `<p class="ia-msg">${t(ins.mensagem)}</p>` : ''}
+      <div class="ia-chips">${g && U.ok(g.conservador) ? `<span class="chip on">+${fmtG(g.conservador)} h/mês${U.ok(g.fte_equivalente) ? ` · ${fmtG(g.fte_equivalente)} FTE` : ''}</span>` : '<span class="chip">ganho qualitativo</span>'}${confPill(ins.confianca)}${ins.motivo_confianca ? `<span class="mini">${esc(ins.motivo_confianca)}</span>` : ''}</div>
+      ${comGraficos && grp && grp.ids ? `<div class="ia-bloco"><div class="ia-rot">Evolução · h/mês·dev do grupo × régua</div><div class="ia-graf"><canvas id="ia-graf-grupo" role="img" aria-label="Evolução mensal do grupo contra a régua"></canvas></div>
+        <div class="legend"><div class="ld"><div class="ldot line" style="background:${PALETA()[0]}"></div>grupo</div><div class="ld"><div class="ldot line" style="background:${UI.COR.neutra}"></div>régua (média do grupo)</div><div class="ld mini">meses parciais ficam em branco</div></div></div>` : ''}
+      ${tot ? `<div class="ia-bloco"><div class="ia-rot">Pessoas por classificação · ${U.fmtInt(tot)}</div><div class="ia-comp" role="img" aria-label="${comp.map(([k, n]) => `${ROT_CAT[k]} ${n}`).join(', ')}">${comp.map(([k, n]) => `<span style="flex:${n};background:${corCat(k)}" title="${ROT_CAT[k]}: ${n} (${U.fmtPct(n / tot, 0)})"></span>`).join('')}</div>
+        <div class="legend">${comp.map(([k, n]) => `<div class="ld"><div class="ldot" style="background:${corCat(k)}"></div>${ROT_CAT[k]} <b>${n}</b> <span class="mini">${U.fmtPct(n / tot, 0)}</span></div>`).join('')}</div></div>` : ''}
+      ${met.length ? `<div class="ia-bloco"><div class="ia-rot">Números que sustentam</div><table class="tbl compacta ia-met ia-int"><thead><tr><th>Métrica</th><th class="num">Valor</th><th>Campo</th></tr></thead><tbody>${met.map(m => `<tr><td>${esc(m.rotulo)}</td><td class="num"><b>${metricaFmt(m)}</b></td><td class="sub" title="campo de origem no recorte">${esc(m.campo)}</td></tr>`).join('')}</tbody></table></div>`
+        : ins.evidencia ? `<div class="ia-bloco"><div class="ia-rot">Evidência</div><div class="mini">${t(ins.evidencia)}</div></div>` : ''}
+      <div class="ia-bloco"><div class="ia-rot">Ação${ins.dono ? ` · ${esc(ins.dono)}` : ''}</div><div class="ia-acao">${t(ins.acao || ins.acao_recomendada)}</div>${ins.dado_para_confirmar ? `<div class="mini">Antes, confirmar: ${t(ins.dado_para_confirmar)}</div>` : ''}</div>
+      <details class="ia-hip"><summary>Hipóteses</summary><div><b>Provável:</b> ${t(ins.hipotese_causa)}</div><div><b>Alternativa:</b> ${t(ins.hipotese_alternativa)}</div></details>
+      ${(ins.sobreposicao_com || []).length ? `<div class="mini" style="margin-top:6px">Sobrepõe #${ins.sobreposicao_com.join(', #')}: não somar os ganhos.</div>` : ''}
+      ${ins._falhas ? `<div class="mini neg" style="margin-top:6px">Sem correspondência no recorte: ${ins._falhas.map(fmtFalha).join(', ')}</div>` : ''}`;
+  }
+  function graficoGrupo(X, ins) {
+    const grp = grupoDe(X, ins.recorte), cv = U.el('ia-graf-grupo'); if (!grp || !grp.ids || !cv) return;
+    const R = X.R, set = new Set(grp.ids.ids), rows = R.rowsUniv.filter(r => set.has(r.pessoaId)), cor = PALETA()[0];
+    const s = Calc.serieMensalDevs(R.ctx, rows, set, R.meses, R.status, R.lim, R.rg).map(x => R.status.get(x.ym) === 'completo' && U.ok(x.horasPorDev) ? U.round(x.horasPorDev, 1) : null);
+    novoGrafico(cv, { type: 'line', data: { labels: R.meses.map(U.fmtMes), datasets: [
+      { label: 'Grupo', data: s, borderColor: cor, backgroundColor: cor, borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: UI.COR.fundo, pointBorderWidth: 2, tension: 0 },
+      { label: 'Régua', data: R.meses.map(() => U.ok(grp.ids.regua) ? U.round(grp.ids.regua, 1) : null), borderColor: UI.COR.neutra, backgroundColor: UI.COR.neutra, borderWidth: 2, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false }, scales: eixos(false), plugins: { legend: { display: false }, tooltip: dica(v => `${U.fmtNum(v, 1)} h/mês·dev`) } } });
+  }
+  const COLS_INS = [['prioridade', '#', 'num'], ['titulo', 'Gap', ''], ['recorte', 'Recorte', ''], ['ganho', 'Ganho (h/mês)', ''], ['confianca', 'Confiança', '']];
+  const PESO_CONF = { alta: 3, media: 2, baixa: 1 };
+  const CHAVE_INS = { prioridade: i => i.prioridade, titulo: i => i.titulo || '', recorte: i => (i.recorte || {}).nome || '',
+    ganho: i => i.ganho_h_mes && U.ok(i.ganho_h_mes.conservador) ? i.ganho_h_mes.conservador : -1, confianca: i => PESO_CONF[i.confianca] || 0 };
+  /* insights visíveis: filtros da barra + ordem escolhida no cabeçalho */
+  function listaInsights(r) {
+    const q = U.norm(S.filtro.q), k = CHAVE_INS[S.ordem.col] || CHAVE_INS.prioridade;
+    return r.validos.filter(i => (!S.filtro.tipo || i.tipo === S.filtro.tipo) && (!S.filtro.conf || i.confianca === S.filtro.conf)
+      && (!q || U.norm(`${i.titulo} ${(i.recorte || {}).nome || ''} ${i.mensagem || ''} ${i.acao || ''}`).includes(q)))
+      .sort((a, b) => { const x = k(a), y = k(b); return (typeof x === 'string' ? x.localeCompare(y, 'pt-BR') : x - y) * S.ordem.dir || a.prioridade - b.prioridade; });
   }
   function preencherInsights(X) {
-    const r = resultadoPara(X.assinatura) || (App.projeto.ia && App.projeto.ia.ultimo), tb = document.querySelector('#ia-tbl tbody');
+    const r = g0(resultadoPara(X.assinatura) || (App.projeto.ia && App.projeto.ia.ultimo)), tb = document.querySelector('#ia-tbl tbody');
     if (!r || !tb || S.gerando) return;
-    const lista = r.validos;
-    if (S.sel >= lista.length) S.sel = 0;
+    document.querySelector('#ia-tbl thead').innerHTML = `<tr>${COLS_INS.map(([k, rot, cls]) => `<th class="sortable ${cls}" data-click="ia" data-op="ordenar" data-k="${k}" ${S.ordem.col === k ? `data-dir="${S.ordem.dir > 0 ? 'asc' : 'desc'}"` : ''} title="Clique para ordenar">${rot}</th>`).join('')}</tr>`;
+    const lista = listaInsights(r), sel = lista.find(i => i.prioridade === S.selP) || lista[0]; S.selP = sel ? sel.prioridade : null;
+    const max = Math.max(1, ...r.validos.map(i => i.ganho_h_mes && U.ok(i.ganho_h_mes.conservador) ? i.ganho_h_mes.conservador : 0));
     const pg = UI.paginar('ia-ins', lista.length, UI.linhasQueCabem('ia-wrap', 38));
-    tb.innerHTML = lista.slice(pg.ini, pg.fim).map((ins, j) => { const i = pg.ini + j, g = ins.ganho_h_mes;
-      return `<tr class="click ${i === S.sel && !S.verDescartados ? 'sel' : ''}" data-click="ia" data-op="sel" data-i="${i}"><td class="num">${esc(ins.prioridade)}</td><td title="${esc(rotRecorte(ins.recorte))}">${esc(rotRecorte(ins.recorte))}</td><td title="${esc(ins.titulo)}">${esc(ins.titulo)}</td>
-        <td class="num">${g ? `${fmtG(g.conservador)} <span class="sub">· ${fmtG(g.potencial)}</span>` : '<span class="nc">qualitativo</span>'}</td><td class="num">${g ? fmtG(g.fte_equivalente) : '—'}</td><td>${confPill(ins.confianca)}</td></tr>`; }).join('')
-      || '<tr><td colspan="6" class="note" style="padding:10px">Nenhum insight passou na conferência dos números. Veja os descartados ou gere de novo.</td></tr>';
+    tb.innerHTML = lista.slice(pg.ini, pg.fim).map(ins => { const g = ins.ganho_h_mes, v = g && U.ok(g.conservador) ? g.conservador : null;
+      return `<tr class="click ${ins === sel && !S.verDescartados ? 'sel' : ''}" data-click="ia" data-op="sel" data-p="${esc(ins.prioridade)}"><td class="num">${esc(ins.prioridade)}</td><td title="${esc(ins.mensagem || ins.titulo)}">${esc(ins.titulo)}</td><td title="${esc(rotRecorte(ins.recorte))}">${esc((ins.recorte || {}).nome || '—')}</td>
+        <td>${v !== null ? `<div class="ia-bar"><i><span style="width:${Math.max(2, v / max * 100)}%"></span></i><b>${fmtG(v)}</b></div>` : '<span class="nc">qualitativo</span>'}</td><td>${confPill(ins.confianca)}</td></tr>`; }).join('')
+      || `<tr><td colspan="5" class="note" style="padding:10px">${r.validos.length ? 'Nenhum gap com esses filtros.' : 'Nenhum insight passou na conferência. Veja os descartados ou gere de novo.'}</td></tr>`;
     U.el('ia-pag').innerHTML = pg.html;
     const det = U.el('ia-det');
-    det.innerHTML = S.verDescartados ? `<h3>Descartados na conferência</h3><div class="mini" style="margin-bottom:8px">Citaram na evidência (ou no ganho) um número que não existe no recorte enviado. Ficam fora da tabela e da exportação principal.</div>${r.descartados.map(ins => `<div class="ia-desc">${detalheHtml(ins, X.nomes)}</div>`).join('')}`
-      : lista.length ? detalheHtml(lista[S.sel], X.nomes) : '<div class="note">Sem insight selecionado.</div>';
+    if (S.verDescartados) det.innerHTML = `<h3>Descartados na conferência</h3><div class="mini" style="margin-bottom:6px">Citaram valor que não existe no recorte enviado.</div>${r.descartados.map(ins => `<div class="ia-desc">${detalheHtml(ins, X, false)}</div>`).join('')}`;
+    else if (sel) { det.innerHTML = detalheHtml(sel, X, true); graficoGrupo(X, sel); }
+    else det.innerHTML = '<div class="note">Nenhum gap selecionado.</div>';
+    ativarTabelas(det);
+  }
+
+  /* tabelas geradas (conversa, "ver tabela", métricas): ordenar pelo cabeçalho e filtrar com 4+ linhas */
+  const numPt = t => { const x = String(t).replace(/−/g, '-').replace(/[^\d,.\-]/g, ''); if (!/\d/.test(x)) return null; const n = parseFloat(x.includes(',') ? x.replace(/\./g, '').replace(',', '.') : x); return Number.isFinite(n) ? n : null; };
+  function ativarTabelas(raiz) {
+    if (!raiz) return;
+    raiz.querySelectorAll('table.ia-int:not([data-int])').forEach(tb => {
+      tb.dataset.int = '1'; const corpo = tb.tBodies[0]; if (!corpo || !tb.tHead) return;
+      const linhas = [...corpo.rows], ths = [...tb.tHead.rows[0].cells];
+      if (linhas.length >= 4) {
+        const f = document.createElement('input'); f.type = 'search'; f.className = 'ia-filtro-tab'; f.placeholder = 'Filtrar…'; f.setAttribute('aria-label', 'Filtrar tabela');
+        f.addEventListener('input', () => { const q = U.norm(f.value); linhas.forEach(r => { r.style.display = !q || U.norm(r.textContent).includes(q) ? '' : 'none'; }); });
+        tb.before(f);
+      }
+      ths.forEach((th, ci) => { th.classList.add('sortable'); th.title = 'Clique para ordenar';
+        th.addEventListener('click', () => {
+          const dir = th.dataset.dir === 'asc' ? 'desc' : 'asc'; ths.forEach(x => delete x.dataset.dir); th.dataset.dir = dir;
+          const val = r => (r.cells[ci] ? r.cells[ci].textContent : '').trim(), num = linhas.every(r => numPt(val(r)) !== null || val(r) === '—' || val(r) === '');
+          linhas.sort((a, b) => { const c = num ? (numPt(val(a)) ?? -Infinity) - (numPt(val(b)) ?? -Infinity) : val(a).localeCompare(val(b), 'pt-BR'); return dir === 'asc' ? c : -c; });
+          linhas.forEach(r => corpo.appendChild(r));
+        }); });
+    });
+  }
+
+  /* bloco ```grafico da conversa: valida a especificação e deixa um canvas para desenhar */
+  function blocoGrafico(txt) {
+    let g; try { g = JSON.parse(txt); } catch (e) { return '<div class="mini">(gráfico com formato inválido)</div>'; }
+    const rot = Array.isArray(g.rotulos) ? g.rotulos.slice(0, 24).map(String) : [];
+    const series = (Array.isArray(g.series) ? g.series : []).slice(0, 3).map(x => ({ nome: String(x.nome || ''), valores: (x.valores || []).slice(0, rot.length).map(v => typeof v === 'number' && Number.isFinite(v) ? v : null) }));
+    if (!rot.length || !series.length) return '<div class="mini">(gráfico sem dados)</div>';
+    const spec = { tipo: ['barra', 'barra_horizontal', 'linha'].includes(g.tipo) ? g.tipo : 'barra', titulo: String(g.titulo || ''), unidade: String(g.unidade || ''), rotulos: rot, series };
+    const cores = PALETA(), fv = v => v === null ? '—' : U.fmtNum(v, 1);
+    return `<figure class="msg-graf">${spec.titulo ? `<figcaption>${esc(spec.titulo)}${spec.unidade ? ` <span class="mini">· ${esc(spec.unidade)}</span>` : ''}</figcaption>` : ''}
+      <div class="msg-graf-c" style="height:${spec.tipo === 'barra_horizontal' ? Math.min(320, 48 + rot.length * 26) : 210}px"><canvas data-graf="${esc(JSON.stringify(spec))}" role="img" aria-label="${esc(spec.titulo || 'gráfico')}"></canvas></div>
+      ${series.length > 1 ? `<div class="legend">${series.map((x, i) => `<div class="ld"><div class="ldot${spec.tipo === 'linha' ? ' line' : ''}" style="background:${cores[i]}"></div>${esc(x.nome)}</div>`).join('')}</div>` : ''}
+      <details><summary>ver tabela</summary><table class="ia-int"><thead><tr><th></th>${series.map(x => `<th>${esc(x.nome)}</th>`).join('')}</tr></thead><tbody>${rot.map((r, i) => `<tr><td>${esc(r)}</td>${series.map(x => `<td>${fv(x.valores[i] ?? null)}</td>`).join('')}</tr>`).join('')}</tbody></table></details></figure>`;
+  }
+  function desenharGraficos(raiz) {
+    if (!raiz) return;
+    raiz.querySelectorAll('canvas[data-graf]:not([data-ok])').forEach(cv => {
+      cv.dataset.ok = '1'; let g; try { g = JSON.parse(cv.dataset.graf); } catch (e) { return; }
+      const cores = PALETA(), hor = g.tipo === 'barra_horizontal', linha = g.tipo === 'linha', un = g.unidade ? ` ${g.unidade}` : '';
+      novoGrafico(cv, { type: linha ? 'line' : 'bar', data: { labels: g.rotulos.map(l => /^\d{4}-\d{2}$/.test(l) ? U.fmtMes(l) : l), datasets: g.series.map((x, i) => linha
+        ? { label: x.nome, data: x.valores, borderColor: cores[i], backgroundColor: cores[i], borderWidth: 2, pointRadius: 4, pointBorderColor: UI.COR.fundo, pointBorderWidth: 2, tension: 0 }
+        : { label: x.nome, data: x.valores, backgroundColor: cores[i], borderRadius: 4, borderSkipped: 'start', maxBarThickness: 28, categoryPercentage: 0.75, barPercentage: 0.9 }) },
+        options: { responsive: true, maintainAspectRatio: false, animation: false, indexAxis: hor ? 'y' : 'x', interaction: { mode: 'index', intersect: false }, scales: eixos(hor),
+          plugins: { legend: { display: false }, tooltip: dica(v => `${U.fmtNum(v, 1)}${un}`) } } });
+    });
   }
 
   function htmlChat(X) {
     const mudou = S.chat.length && S.chatAssinatura !== X.assinatura, temInsights = !!resultadoPara(X.assinatura);
-    const sugs = ['Quais são os três maiores gaps deste recorte e por quê?', 'Onde a variação recente de h/mês·dev é pior, e ela é consistente?', 'Que dados faltam para confirmar os gaps antes de agir?', 'Resuma o recorte em 5 tópicos para um sócio.'];
+    const sugs = ['Os 3 maiores gaps', 'h/mês·dev por mês', 'Onde há capacidade ociosa?', 'Resumo para o sócio'];
     const msgs = S.chat.map((m, i) => `<div class="msg ${m.role === 'user' ? 'u' : 'a'}${m.erro ? ' erro' : ''}" ${i === S.chat.length - 1 && S.respondendo ? 'id="ia-atual"' : ''}>${m.role === 'user' ? esc(m.text).replace(/\n/g, '<br>') : m.text ? md(m.text, X.nomes) : '<span class="spin"></span>pensando…'}</div>`).join('');
-    return `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Conversa com o assistente</div><div class="card-sub">${esc(NOME_MODELO)} responde sobre o recorte atual (agregados e pseudônimos)${temInsights ? ' e os insights gerados para ele' : '; gere os insights na página 1 para ele considerá-los também'}</div></div>
+    return `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Conversa com o assistente</div><div class="card-sub">${esc(NOME_MODELO)} · recorte atual${temInsights ? ' e insights gerados' : ''}</div></div>
       <div class="card-tools"><button class="btn s xs" data-click="ia" data-op="novaConversa" ${S.chat.length && !S.respondendo ? '' : 'disabled'}>Nova conversa</button></div></div>
-      <div class="card-body">${mudou ? '<div class="note box warn" style="margin:0;flex:none">O recorte mudou desde o início desta conversa; a próxima pergunta abre uma conversa nova com os números atuais.</div>' : ''}
-        <div class="chat" id="ia-chat">${msgs || `<div class="empty" style="padding:28px 12px"><p>Pergunte sobre gaps, tendências, grupos ou o que investigar primeiro.</p><div class="sug">${sugs.map(s => `<button data-click="ia" data-op="sugestao" data-t="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>`}</div>
-        <div class="chat-in"><textarea id="ia-pergunta" data-input="ia" data-op="rascunho" placeholder="Pergunte ao assistente… (Enter envia, Shift+Enter quebra a linha)" ${S.respondendo ? 'disabled' : ''}>${esc(S.rascunho)}</textarea>
+      <div class="card-body">${mudou ? '<div class="note box warn" style="margin:0;flex:none">Recorte mudou: a próxima pergunta abre uma conversa nova.</div>' : ''}
+        <div class="chat" id="ia-chat">${msgs || `<div class="empty" style="padding:28px 12px"><p>Pergunte sobre o recorte. Respostas curtas, com tabela ou gráfico.</p><div class="sug">${sugs.map(s => `<button data-click="ia" data-op="sugestao" data-t="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>`}</div>
+        <div class="chat-in"><textarea id="ia-pergunta" data-input="ia" data-op="rascunho" placeholder="Pergunte… (Enter envia, Shift+Enter quebra a linha)" ${S.respondendo ? 'disabled' : ''}>${esc(S.rascunho)}</textarea>
           ${S.respondendo ? '<button class="btn s" data-click="ia" data-op="pararResposta">Parar</button>' : '<button class="btn p" data-click="ia" data-op="enviar">Enviar</button>'}</div></div></div>`;
   }
 
   function exportar() {
     const X = recorteIA(), r = resultadoPara(X.assinatura) || (App.projeto.ia && App.projeto.ia.ultimo); if (!r) return;
-    const cab = ['Prioridade', 'Tipo', 'Recorte', 'Gap', 'Evidência', 'Causa provável', 'Explicação alternativa', 'Ganho conservador (h/mês)', 'Ganho potencial (h/mês)', 'FTE equivalente', 'Sobreposição com', 'Ação recomendada', 'Dado para confirmar', 'Confiança', 'Motivo da confiança'];
-    const linha = ins => { const g = ins.ganho_h_mes || {}; return [ins.prioridade, ROT_TIPO[ins.tipo] || ins.tipo, rotRecorte(ins.recorte), ins.titulo, ins.evidencia, ins.hipotese_causa, ins.hipotese_alternativa, g.conservador ?? null, g.potencial ?? null, g.fte_equivalente ?? null, (ins.sobreposicao_com || []).join(', '), ins.acao_recomendada, ins.dado_para_confirmar, ins.confianca, ins.motivo_confianca]; };
+    const cab = ['Prioridade', 'Tipo', 'Recorte', 'Gap', 'Mensagem', 'Números que sustentam', 'Ganho conservador (h/mês)', 'Ganho potencial (h/mês)', 'FTE equivalente', 'Sobreposição com', 'Ação', 'Dono', 'Confirmar antes', 'Causa provável', 'Explicação alternativa', 'Confiança', 'Motivo da confiança'];
+    const linha = ins => { const g = ins.ganho_h_mes || {}; return [ins.prioridade, ROT_TIPO[ins.tipo] || ins.tipo, rotRecorte(ins.recorte), ins.titulo, ins.mensagem || '', (ins.metricas || []).map(m => `${m.rotulo}: ${metricaFmt(m)} (${m.campo})`).join(' | ') || ins.evidencia || '',
+      g.conservador ?? null, g.potencial ?? null, g.fte_equivalente ?? null, (ins.sobreposicao_com || []).join(', '), ins.acao || ins.acao_recomendada || '', ins.dono || '', ins.dado_para_confirmar, ins.hipotese_causa, ins.hipotese_alternativa, ins.confianca, ins.motivo_confianca]; };
     const wb = XLSX.utils.book_new();
     const meta = [['Insights de produtividade (IA) — Análise de desenvolvimento'], [], ['Projeto', App.projeto.nome], ['Recorte', r.desc], ['Gerado em', U.fmtDataHora(r.geradoEm)], ['Modelo', nomeModelo(r.modelo)],
-      ['Resumo executivo', r.resumo], ['Lacunas de dados', r.lacunas.join(' | ')], ['Conferência', `${r.validos.length} de ${r.total} insight(s) com todos os números encontrados no recorte enviado`],
+      ['Mensagem principal', r.resumo], ['Lacunas de dados', (r.lacunas || []).join(' | ')], ['Conferência', `${r.validos.length} de ${r.total} insight(s) com todos os números encontrados no recorte enviado`],
       ['Dados demonstrativos', App.projeto.fontes.some(f => f.demo) ? 'SIM — dados sintéticos' : 'não'], [], ['Nota', 'Pessoas pseudonimizadas (P-0001). Baixa produtividade em commits é sinal para investigar, não avaliação de desempenho.']];
     const ws0 = XLSX.utils.aoa_to_sheet(meta); ws0['!cols'] = [{ wch: 22 }, { wch: 120 }]; XLSX.utils.book_append_sheet(wb, ws0, 'Resumo');
     const ws1 = XLSX.utils.aoa_to_sheet([cab, ...r.validos.map(linha)]); ws1['!cols'] = cab.map(c => ({ wch: Math.max(12, Math.min(60, c.length + 4)) })); XLSX.utils.book_append_sheet(wb, ws1, 'Insights');
-    if (r.descartados.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[...cab, 'Números sem correspondência'], ...r.descartados.map(i => [...linha(i), i._falhas.join(', ')])]), 'Descartados');
+    if (r.descartados.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[...cab, 'Números sem correspondência'], ...r.descartados.map(i => [...linha(i), i._falhas.map(n => typeof n === 'number' ? U.fmtNum(n, 1) : n).join(', ')])]), 'Descartados');
     App.baixarWorkbook(wb, `insights-ia-${U.hojeISO().slice(0, 10)}.xlsx`);
   }
 
@@ -2408,7 +2580,10 @@ ${JSON.stringify(payload, null, 1)}
     switch (op) {
       case 'gerar': gerar(); return;
       case 'cancelar': if (S.gerando) { S.gerando.cancelado = true; if (S.gerando.stream) S.gerando.stream.abort(); } return;
-      case 'sel': S.sel = +el.dataset.i; S.verDescartados = false; break;
+      case 'sel': S.selP = +el.dataset.p; S.verDescartados = false; preencherInsights(recorteIA()); return;
+      case 'ordenar': { const k = el.dataset.k; S.ordem = S.ordem.col === k ? { col: k, dir: -S.ordem.dir } : { col: k, dir: k === 'ganho' || k === 'confianca' ? -1 : 1 }; preencherInsights(recorteIA()); return; }
+      case 'filtroQ': case 'filtroTipo': case 'filtroConf':
+        S.filtro[{ filtroQ: 'q', filtroTipo: 'tipo', filtroConf: 'conf' }[op]] = el.value; App.pag = App.pag || {}; App.pag['ia-ins'] = 1; preencherInsights(recorteIA()); return;
       case 'descartados': S.verDescartados = !S.verDescartados; break;
       case 'exportar': exportar(); return;
       case 'enviar': enviar((U.el('ia-pergunta') || {}).value); return;
