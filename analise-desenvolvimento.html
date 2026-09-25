@@ -330,6 +330,8 @@ th .cat{font-size:inherit;font-weight:inherit}
 .ia-filtro-tab{height:28px;width:min(240px,100%);margin:4px 0;display:block}
 th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--text)}th[data-dir="asc"]::after{content:" ▲";font-size:10px}th[data-dir="desc"]::after{content:" ▼";font-size:10px}
 .msg th.sortable{white-space:nowrap}
+.kpi-label{flex-wrap:wrap;row-gap:4px}.kpi-label .seg{flex:none}
+.metas-pct{display:inline-flex;align-items:center;gap:6px;margin-left:6px}
 .pl-grid{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.7fr);gap:16px}.pl-grid>*{min-height:0}
 .tbl td.pl-acao{white-space:normal;max-width:340px;min-width:200px;line-height:1.35;padding-top:4px;padding-bottom:4px}
 #pl-tab td{height:36px}#pl-tab a{color:var(--text-strong);text-decoration:none;font-weight:600}#pl-tab a:hover{color:var(--primary);text-decoration:underline}
@@ -439,7 +441,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 </main>
 
 <div id="toasts" aria-live="polite"></div>
-<footer class="wm">Gradus Consultoria · processamento local no navegador; só a aba Insights IA envia dados, agregados e com pessoas pseudonimizadas, à API da Anthropic · <span id="rodape-versao">v1.3.0 · 25/09/2026</span></footer>
+<footer class="wm">Gradus Consultoria · processamento local no navegador; só a aba Insights IA envia dados, agregados e com pessoas pseudonimizadas, à API da Anthropic · <span id="rodape-versao">v1.4.0 · 25/09/2026</span></footer>
 
 <script>'use strict';
 /* Utilitários: formatação PT-BR, datas sem fuso (tudo em componentes UTC),
@@ -539,7 +541,7 @@ const Modelo = (() => {
   const CRITERIOS_PADRAO = { senioridade: false, natureza: false, empresa: false, tribo: false, squad: false, stack: false };
   const FILTROS_PADRAO = () => ({ mesIni: null, mesFim: null, pessoas: [], repos: [], stacks: [], senioridade: [], natureza: [], empresa: [], tribo: [], squad: [] });
   /* metas: janela padrão (vazia = base inteira) + exceções { tribo: '' | nome, mes: '' | 'AAAA-MM', mesIni, mesFim } */
-  const METAS_PADRAO = () => ({ padrao: { mesIni: null, mesFim: null }, regras: [] });
+  const METAS_PADRAO = () => ({ padrao: { mesIni: null, mesFim: null }, percentil: 0.5, regras: [] });
 
   function novoProjeto(nome) {
     const agora = U.hojeISO();
@@ -609,7 +611,8 @@ const Modelo = (() => {
     // metas: v1.2 guardava só um período da régua na análise; ele vira a janela padrão
     const mt = pr.metas && typeof pr.metas === 'object' ? pr.metas : null, rpAnt = (p.analise && p.analise.reguaPeriodo) || {};
     p.parametros.metas = { padrao: Object.assign({ mesIni: null, mesFim: null }, mt ? mt.padrao : { mesIni: rpAnt.mesIni || null, mesFim: rpAnt.mesFim || null }),
-      regras: mt && Array.isArray(mt.regras) ? mt.regras.filter(r => r && r.mesIni && r.mesFim).map(r => ({ tribo: r.tribo || '', mes: r.mes || '', mesIni: r.mesIni, mesFim: r.mesFim })) : [] };
+      percentil: mt && [0.25, 0.5, 0.75].includes(mt.percentil) ? mt.percentil : 0.5,
+      regras: mt && Array.isArray(mt.regras) ? mt.regras.filter(r => r && r.mesIni && r.mesFim).map(r => ({ tribo: r.tribo || '', mes: r.mes || '', mesIni: r.mesIni, mesFim: r.mesFim, percentil: [0.25, 0.5, 0.75].includes(r.percentil) ? r.percentil : '' })) : [] };
     const an = p.analise || {};
     p.analise = Object.assign(base.analise, an);
     delete p.analise.mostrarMediaMovel; delete p.analise.distribuicaoPor;
@@ -1197,15 +1200,15 @@ const Calc = (() => {
     return { valores: out, mesesCompletos: n };
   }
   /* réguas: mediana da produtividade por tribo (≥ MIN_TRIBO pessoas) e do universo; itens = [{id, tribo, valor}] */
-  function reguas(itens) {
+  function reguas(itens, q = 0.5) {
     const porTribo = new Map(); itens.forEach(i => { const t = i.tribo || ''; if (!porTribo.has(t)) porTribo.set(t, []); porTribo.get(t).push(i.valor); });
-    const out = { universo: U.mediana(itens.map(i => i.valor)), tribos: new Map(), nTribo: new Map(), n: itens.length };
-    for (const [t, vals] of porTribo) { out.nTribo.set(t, vals.length); if (t && vals.length >= MIN_TRIBO) out.tribos.set(t, U.mediana(vals)); }
+    const out = { universo: U.quantil(itens.map(i => i.valor), q), tribos: new Map(), nTribo: new Map(), n: itens.length };
+    for (const [t, vals] of porTribo) { out.nTribo.set(t, vals.length); if (t && vals.length >= MIN_TRIBO) out.tribos.set(t, U.quantil(vals, q)); }
     return out;
   }
   /* réguas calculadas no período da régua: produtividade de cada pessoa do universo daquele período, por tribo */
-  function reguasPeriodo(prodRegua, attrsRegua, universoRegua) {
-    return reguas([...universoRegua].map(id => ({ id, tribo: (attrsRegua.get(id) || {}).tribo || '', valor: prodRegua.get(id) || 0 })));
+  function reguasPeriodo(prodRegua, attrsRegua, universoRegua, q = 0.5) {
+    return reguas([...universoRegua].map(id => ({ id, tribo: (attrsRegua.get(id) || {}).tribo || '', valor: prodRegua.get(id) || 0 })), q);
   }
   const reguaDe = (rg, tribo) => rg.tribos.has(tribo) ? { base: 'tribo', regua: rg.tribos.get(tribo) } : { base: 'universo', regua: rg.universo };
   // ── metas (régua) por tribo e mês ────────────────────────────────────────
@@ -1216,26 +1219,28 @@ const Calc = (() => {
     const rs = (cfg && cfg.regras) || [], acha = (t, m) => rs.find(r => (r.tribo || '') === t && (r.mes || '') === m);
     return (tribo && acha(tribo, ym)) || (tribo && acha(tribo, '')) || acha('', ym) || null;
   }
+  const ROT_PCT = { 0.25: 'P25', 0.5: 'mediana', 0.75: 'P75' };
   function criarMetas(ctx, cfg) {
+    const pctPadrao = [0.25, 0.5, 0.75].includes(cfg && cfg.percentil) ? cfg.percentil : 0.5;
     const janelas = new Map(), completos = ctx.meses.filter(y => ctx.status.get(y) === 'completo');
     const semFiltro = { mesIni: null, mesFim: null, pessoas: [], repos: [], stacks: [], senioridade: [], natureza: [], empresa: [], tribo: [], squad: [] };
     const padrao = () => { const p = (cfg && cfg.padrao) || {}; return { mesIni: p.mesIni || completos[0] || ctx.meses[0] || '', mesFim: p.mesFim || completos[completos.length - 1] || ctx.meses[ctx.meses.length - 1] || '' }; };
-    function janela(ini, fim) {
-      const k = ini + '|' + fim; if (janelas.has(k)) return janelas.get(k);
+    function janela(ini, fim, q = pctPadrao) {
+      const k = ini + '|' + fim + '|' + q; if (janelas.has(k)) return janelas.get(k);
       const meses = ini && fim && ini <= fim ? U.mesesEntre(ini, fim) : [];
       let out = { mesIni: ini, mesFim: fim, meses, mesesCompletos: 0, universo: null, tribos: new Map(), nTribo: new Map(), n: 0 };
       if (meses.length) {
         const rows = ctx.rows.filter(r => r.ym >= ini && r.ym <= fim), univ = pessoasUniverso(ctx, rows, meses, ctx.status, semFiltro), prod = produtividade(rows, univ, meses, ctx.status);
-        if (prod.mesesCompletos) out = { ...out, mesesCompletos: prod.mesesCompletos, ...reguasPeriodo(prod.valores, atributosTodos(ctx, rows, univ, meses, ctx.status), univ) };
+        if (prod.mesesCompletos) out = { ...out, mesesCompletos: prod.mesesCompletos, ...reguasPeriodo(prod.valores, atributosTodos(ctx, rows, univ, meses, ctx.status), univ, q) };
       }
       janelas.set(k, out); return out;
     }
-    /* meta da tribo no mês: { regua (h/mês), base: 'tribo' | 'universo', janela } */
+    /* meta da tribo no mês: { regua (h/mês), base: 'tribo' | 'universo', janela, q (percentil) } */
     function metaDe(ym, tribo) {
-      const r = regraMeta(cfg, tribo || '', ym), w = r ? { mesIni: r.mesIni, mesFim: r.mesFim } : padrao(), j = janela(w.mesIni, w.mesFim);
-      return tribo && j.tribos.has(tribo) ? { regua: j.tribos.get(tribo), base: 'tribo', janela: j } : { regua: j.universo, base: 'universo', janela: j };
+      const r = regraMeta(cfg, tribo || '', ym), w = r ? { mesIni: r.mesIni, mesFim: r.mesFim } : padrao(), q = r && r.percentil ? r.percentil : pctPadrao, j = janela(w.mesIni, w.mesFim, q);
+      return tribo && j.tribos.has(tribo) ? { regua: j.tribos.get(tribo), base: 'tribo', janela: j, q } : { regua: j.universo, base: 'universo', janela: j, q };
     }
-    return { metaDe, janela, padrao, temRegras: !!((cfg && cfg.regras) || []).length };
+    return { metaDe, janela, padrao, percentil: pctPadrao, temRegras: !!((cfg && cfg.regras) || []).length };
   }
   /* meta de cada pessoa no período analisado: média das metas mensais da tribo vigente em cada mês completo */
   function metasPessoas(ctx, universo, meses, status) {
@@ -1302,7 +1307,7 @@ const Calc = (() => {
   return { CRIT_PESSOA, ROTULO_CRIT, GRUPO_CRIT, JANELAS, AGRUPAMENTOS, AGRUP_ATRIB, vigente, aliasDe, resolverPessoas, atributoEm, pessoaVigente, statusMeses, contexto,
     filtrar, pessoasUniverso, somaLiq, somaBruta, chaveGrupo, porGrupo, gruposRecorte, serieMensal, mediaMovel, variacaoEquivalente, variacao, estat,
     observacoesPorPessoa, distancia, atributosPessoa, atributosTodos, criteriosAtivos, paresDe, referenciaIndividual, participacao, concentracao,
-    CATEGORIAS, ROTULO_CAT, MIN_TRIBO, classificar, produtividade, reguas, reguasPeriodo, reguaDe, classificacao, contarCategorias, devsDoMes, serieMensalDevs, criarMetas, metasPessoas, planoMeta };
+    CATEGORIAS, ROTULO_CAT, MIN_TRIBO, classificar, produtividade, reguas, reguasPeriodo, reguaDe, classificacao, contarCategorias, devsDoMes, serieMensalDevs, criarMetas, metasPessoas, planoMeta, ROT_PCT };
 })();
 </script>
 <script>'use strict';
@@ -1455,8 +1460,10 @@ const UI = (() => {
   /* como a meta foi definida, em poucas palavras (cartões, legendas e exportações) */
   function descMeta(R) {
     const m = R.ctx.metas, j = m.padrao(), jan = j.mesIni && j.mesFim ? perMeses(U.mesesEntre(j.mesIni, j.mesFim)) : '—';
-    return m.temRegras ? `mediana da tribo por mês (padrão ${jan}, com exceções)` : `mediana da tribo em ${jan}`;
+    const q = Calc.ROT_PCT[m.percentil];
+    return m.temRegras ? `${q} da tribo por mês (padrão ${jan}, com exceções)` : `${q} da tribo em ${jan}`;
   }
+  const artQ = R => ({ 0.25: 'o P25', 0.5: 'a mediana', 0.75: 'o P75' })[R.ctx.metas.percentil], pelaQ = R => ({ 0.25: 'pelo P25', 0.5: 'pela mediana', 0.75: 'pelo P75' })[R.ctx.metas.percentil];
   /* nível do plano para a meta: o mais fino que o cadastro tiver */
   function nivelPlano(R) { return ['squad', 'tribo', 'empresa'].find(k => R.ctx.camposPessoa[k]) || null; }
   const descLim = R => `detrator < ${U.fmtNum(R.lim.det * 100, 0)}% · neutro ${U.fmtNum(R.lim.det * 100, 0)}–${U.fmtNum(R.lim.imp * 100, 0)}% · impulsionador > ${U.fmtNum(R.lim.imp * 100, 0)}% da meta`;
@@ -1628,7 +1635,7 @@ const UI = (() => {
     const k4 = `<div class="kpi"><div class="kpi-label"><span>Meta de produtividade</span><span>${esc(descMeta(R))}</span></div>
         <div class="kpi-duo"><div><div class="kpi-cap">Meta do perímetro</div><div class="kpi-value" id="kpi-meta">${fmtHD(mp)}</div></div>
         <div><div class="kpi-cap">Realizado ÷ meta</div><div class="kpi-value ${pctM === null ? '' : pctM >= 1 ? 'pos' : 'neg'}" id="kpi-meta-pct">${pctM === null ? '—' : U.fmtPct(pctM, 0)}</div></div></div>
-        <div class="kpi-sub">${pctM === null ? 'sem meta calculável no período' : pctM >= 1 ? '<b>meta atingida</b>' : `faltam <b>${U.fmtNum(mp - hDev, 1)} h/mês·dev</b>`} <span class="m">· meta de cada dev = mediana da tribo dele, ponderada por dev-mês nos meses completos</span></div></div>`;
+        <div class="kpi-sub">${pctM === null ? 'sem meta calculável no período' : pctM >= 1 ? '<b>meta atingida</b>' : `faltam <b>${U.fmtNum(mp - hDev, 1)} h/mês·dev</b>`} <span class="m">· meta de cada dev = meta da tribo dele; média ponderada por dev-mês nos meses completos</span></div></div>`;
     box.innerHTML = k1 + k2 + k3 + k4;
   }
   function kpiVar(v, janela, comSeletor, unidade = 'h') {
@@ -1662,11 +1669,11 @@ const UI = (() => {
     const notaParcial = parciais.length ? ` · * cobertura parcial (${parciais.map(y => `${U.fmtMes(y)}: ${(R.faltantes.get(y) || []).length} repositório(s) sem cobertura completa`).join('; ')})` : '';
     const s = dados || R.serie;
     const modo = an.evolucaoModo === 'categorias' ? 'categorias' : 'horas';
-    const tabela = [['Devs', s.map(x => x.devs), v => U.fmtInt(v)]].concat(modo === 'horas' ? [['Meta', s.map(x => x.meta), v => U.ok(v) ? U.fmtNum(v, 1) : '—']] : []);
-    const layout = { padding: { top: modo === 'horas' ? 16 : 0, left: 14, bottom: tabela.length * 18 + 4 } };
+    const tabela = [['Qtd. de devs', s.map(x => x.devs), v => U.fmtInt(v)]];
+    const layout = { padding: { top: modo === 'horas' ? 16 : 0, left: 66, bottom: tabela.length * 18 + 4 } };   // à esquerda cabe o rótulo da tabela
     const escalas = extra => ({ x: { stacked: modo === 'categorias', grid: { display: false }, border: { display: false }, ticks: { padding: 6 } },
       y: { stacked: modo === 'categorias', beginAtZero: true, grid: { color: COR.grade, drawTicks: false }, border: { display: false }, ticks: { padding: 6, ...(extra || {}) } } });
-    const legTab = `<div class="ld mini">· abaixo do eixo: desenvolvedores do mês${modo === 'horas' ? ' e meta (h/mês·dev)' : ''}</div>`;
+    const legTab = '<div class="ld mini">· abaixo do eixo: quantidade de desenvolvedores no mês</div>';
     if (modo === 'horas') {
       sub.textContent = `horas estimadas líquidas por desenvolvedor no mês (horas do mês ÷ desenvolvedores do mês) · meta = média da meta de cada dev do mês (${descMeta(R)})` + notaParcial;
       leg.innerHTML = `<div class="ld"><div class="ldot" style="background:${COR.primaria}"></div>horas líquidas por desenvolvedor</div><div class="ld"><div class="ldot line" style="background:${COR.destaque}"></div>meta de produtividade</div>` + legTab;
@@ -1707,7 +1714,7 @@ const UI = (() => {
     const cls = [...R.cls.pessoas.entries()].filter(([id]) => emAnalise.has(id));
     const nivel = nivelClassificacao(R), rotNivel = nivel ? Calc.ROTULO_CRIT[nivel] : 'Grupo';
     U.el('ch-cat-sub').textContent = R.mesesCompletos
-      ? `barras por ${rotNivel.toLowerCase()}${nivel && DICA_NIVEL[nivel] ? ` (${DICA_NIVEL[nivel]})` : ''} · meta de cada pessoa = meta da tribo dela (${descMeta(R)}), média dos meses completos de ${perMeses(R.meses)}; tribo com menos de ${Calc.MIN_TRIBO} pessoas usa a mediana da base inteira · pessoa = produtividade em ${perMeses(R.meses)} · ${descLim(R)}${!R.ctx.camposPessoa.tribo ? ' · sem tribo nos dados cadastrais: todos pela mediana da base inteira' : ''}`
+      ? `barras por ${rotNivel.toLowerCase()}${nivel && DICA_NIVEL[nivel] ? ` (${DICA_NIVEL[nivel]})` : ''} · meta de cada pessoa = meta da tribo dela (${descMeta(R)}), média dos meses completos de ${perMeses(R.meses)}; tribo com menos de ${Calc.MIN_TRIBO} pessoas usa ${artQ(R)} da base inteira · pessoa = produtividade em ${perMeses(R.meses)} · ${descLim(R)}${!R.ctx.camposPessoa.tribo ? ` · sem tribo nos dados cadastrais: todos ${pelaQ(R)} da base inteira` : ''}`
       : `sem classificação: o período ${perMeses(R.meses)} não tem mês completo.`;
     const grupos = new Map(); const novo = () => ({ n: 0, detrator: 0, neutro: 0, impulsionador: 0, semRegua: 0, reguas: [], universo: false, sem: false, somaProd: 0 });
     const todas = novo();
@@ -1733,9 +1740,9 @@ const UI = (() => {
     const cel = (g, c) => `<td class="num">${U.fmtInt(g[c])} ${pct(g[c], g.n)}</td>`;
     const box = U.el('cat-tribos');
     const mediaTxt = g => g.n && R.mesesCompletos ? U.fmtNum(g.somaProd / g.n, 1) : '—';
-    box.innerHTML = `<div class="tbl-wrap fill" id="cat-wrap"><table class="tbl compacta" data-nivel="${nivel || ''}"><thead><tr><th>${esc(rotNivel)}</th><th class="num" title="H/mês por dev (média): horas líquidas por mês das pessoas do grupo em ${esc(perMeses(R.meses))} (horas ÷ meses completos ÷ pessoas)">H/mês·dev</th><th class="num" title="Meta (h/mês): mediana da tribo de cada pessoa, média dos meses completos; faixa quando o grupo reúne metas diferentes">Meta</th><th class="num">Pessoas</th><th class="num"><span class="cat detrator">Detr.</span></th><th class="num"><span class="cat neutro">Neutros</span></th><th class="num"><span class="cat impulsionador">Impuls.</span></th></tr></thead><tbody></tbody>
+    box.innerHTML = `<div class="tbl-wrap fill" id="cat-wrap"><table class="tbl compacta" data-nivel="${nivel || ''}"><thead><tr><th>${esc(rotNivel)}</th><th class="num" title="H/mês por dev (média): horas líquidas por mês das pessoas do grupo em ${esc(perMeses(R.meses))} (horas ÷ meses completos ÷ pessoas)">H/mês·dev</th><th class="num" title="Meta (h/mês): percentil da tribo de cada pessoa, média dos meses completos; faixa quando o grupo reúne metas diferentes">Meta</th><th class="num">Pessoas</th><th class="num"><span class="cat detrator">Detr.</span></th><th class="num"><span class="cat neutro">Neutros</span></th><th class="num"><span class="cat impulsionador">Impuls.</span></th></tr></thead><tbody></tbody>
       <tfoot><tr><td>Total</td><td class="num">${mediaTxt(todas)}</td><td class="num">${reguaTxt({ reguas: cls.map(([, x]) => x.regua).filter(U.ok) })}</td><td class="num">${U.fmtInt(todas.n)}</td>${cel(todas, 'detrator')}${cel(todas, 'neutro')}${cel(todas, 'impulsionador')}</tr></tfoot></table></div><div class="pag-slot" id="cat-pag"></div>
-      <div class="mini">Produtividade = horas líquidas ÷ meses completos. Pessoas do cadastro sem commits entram com zero. Meta marcada com * inclui pessoas avaliadas pela mediana da base inteira (sem tribo ou tribo com menos de ${Calc.MIN_TRIBO} pessoas). Indício para investigação, não avaliação de desempenho.</div>`;
+      <div class="mini">Produtividade = horas líquidas ÷ meses completos. Pessoas do cadastro sem commits entram com zero. Meta marcada com * inclui pessoas avaliadas ${pelaQ(R)} da base inteira (sem tribo ou tribo com menos de ${Calc.MIN_TRIBO} pessoas). Indício para investigação, não avaliação de desempenho.</div>`;
     const por = linhasQueCabem('cat-wrap', ROW_TBL), pg = paginar('cat-' + (nivel || 'todos'), linhas.length, por);
     box.querySelector('tbody').innerHTML = linhas.slice(pg.ini, pg.fim).map(([t, g]) => `<tr><td>${esc(t)}</td><td class="num">${mediaTxt(g)}</td><td class="num">${reguaTxt(g)}${g.universo ? ' *' : ''}</td><td class="num">${U.fmtInt(g.n)}</td>${cel(g, 'detrator')}${cel(g, 'neutro')}${cel(g, 'impulsionador')}</tr>`).join('');
     U.el('cat-pag').innerHTML = pg.html;
@@ -1965,18 +1972,20 @@ const UI = (() => {
     const selMes = (val, act, attrs, vazio) => `<select data-act="${act}" ${attrs}>${vazio !== undefined ? `<option value="">${vazio}</option>` : ''}${ctx.meses.map(y => opt(y, val, U.fmtMes(y))).join('')}</select>`;
     const regras = m.regras.map((r, i) => `<tr><td><select data-act="metaRegra" data-i="${i}" data-c="tribo"><option value="">Todas as tribos</option>${tribos.map(t => opt(t, r.tribo)).join('')}</select></td>
       <td>${selMes(r.mes, 'metaRegra', `data-i="${i}" data-c="mes"`, 'Todos os meses')}</td><td>${selMes(r.mesIni, 'metaRegra', `data-i="${i}" data-c="mesIni"`)}</td><td>${selMes(r.mesFim, 'metaRegra', `data-i="${i}" data-c="mesFim"`)}</td>
+      <td><select data-act="metaRegra" data-i="${i}" data-c="percentil"><option value="">padrão</option>${[[0.25, 'P25'], [0.5, 'Mediana'], [0.75, 'P75']].map(([q, l]) => `<option value="${q}" ${r.percentil === q ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
       <td class="act"><button class="btn d xs" data-click="delMeta" data-i="${i}" title="Excluir exceção">×</button></td></tr>`).join('');
     const linhas = [...tribos, ''].map(t => `<tr><td>${t ? esc(t) : '<i>Sem tribo · base inteira</i>'}</td>${ctx.meses.map(y => { const x = ctx.metas.metaDe(y, t);
-      return `<td class="num" title="${esc(`janela ${x.janela.meses.length ? perMeses(x.janela.meses) : '—'}${t && x.base === 'universo' ? ' · tribo com menos de ' + Calc.MIN_TRIBO + ' pessoas: mediana da base inteira' : ''}`)}">${U.ok(x.regua) ? U.fmtNum(x.regua, 1) : '—'}${t && x.base === 'universo' ? '*' : ''}</td>`; }).join('')}</tr>`).join('');
-    return `<div class="grid-2 fill metas-grid"><div class="card fill"><div class="card-hdr"><div><div class="card-title">Como a meta é calculada</div><div class="card-sub">meta da tribo no mês = produtividade mediana da tribo numa janela de meses, sobre a base inteira. Não muda com os filtros: vale para todo o relatório.</div></div>
+      return `<td class="num" title="${esc(`janela ${x.janela.meses.length ? perMeses(x.janela.meses) : '—'}${t && x.base === 'universo' ? ' · tribo com menos de ' + Calc.MIN_TRIBO + ' pessoas: mesmo percentil na base inteira' : ''} · ${Calc.ROT_PCT[x.q]}`)}">${U.ok(x.regua) ? U.fmtNum(x.regua, 1) : '—'}${t && x.base === 'universo' ? '*' : ''}</td>`; }).join('')}</tr>`).join('');
+    return `<div class="grid-2 fill metas-grid"><div class="card fill"><div class="card-hdr"><div><div class="card-title">Como a meta é calculada</div><div class="card-sub">meta da tribo no mês = percentil escolhido da produtividade da tribo numa janela de meses, sobre a base inteira. Não muda com os filtros: vale para todo o relatório.</div></div>
         <div class="card-tools"><button class="btn s xs" data-click="limparMetas">Voltar ao padrão</button></div></div>
       <div class="card-body" style="overflow:auto">
-        <div class="metas-padrao"><b>Padrão</b> <span class="mini">(todas as tribos, todos os meses)</span> · janela de ${selMes(m.padrao.mesIni, 'metaPadrao', 'data-k="mesIni"', 'início da base')} até ${selMes(m.padrao.mesFim, 'metaPadrao', 'data-k="mesFim"', 'fim da base')} <span class="mini">= ${j.mesIni && j.mesFim ? perMeses(U.mesesEntre(j.mesIni, j.mesFim)) : '—'}</span></div>
+        <div class="metas-padrao"><b>Padrão</b> <span class="mini">(todas as tribos, todos os meses)</span> · janela de ${selMes(m.padrao.mesIni, 'metaPadrao', 'data-k="mesIni"', 'início da base')} até ${selMes(m.padrao.mesFim, 'metaPadrao', 'data-k="mesFim"', 'fim da base')} <span class="mini">= ${j.mesIni && j.mesFim ? perMeses(U.mesesEntre(j.mesIni, j.mesFim)) : '—'}</span>
+          <span class="metas-pct">· percentil <span class="seg mini-seg">${[[0.25, 'P25 (1º quartil)'], [0.5, 'Mediana'], [0.75, 'P75 (3º quartil)']].map(([q, l]) => `<button data-click="metaPercentil" data-k="${q}" class="${(m.percentil || 0.5) === q ? 'on' : ''}">${l}</button>`).join('')}</span></span></div>
         <div class="metas-rot">Exceções <span class="mini">· a mais específica vence: tribo + mês › tribo › mês › padrão</span></div>
-        <table class="grid-edit metas-regras"><thead><tr><th>Tribo</th><th>Mês da meta</th><th>Janela de</th><th>até</th><th></th></tr></thead><tbody>${regras || '<tr><td colspan="5" class="note" style="padding:8px 10px">Nenhuma exceção: todas as tribos usam a janela padrão em todos os meses.</td></tr>'}</tbody></table>
+        <table class="grid-edit metas-regras"><thead><tr><th>Tribo</th><th>Mês da meta</th><th>Janela de</th><th>até</th><th>Percentil</th><th></th></tr></thead><tbody>${regras || '<tr><td colspan="6" class="note" style="padding:8px 10px">Nenhuma exceção: todas as tribos usam a janela padrão em todos os meses.</td></tr>'}</tbody></table>
         <div class="card-tools" style="margin-top:8px"><button class="btn s xs" data-click="addMeta">+ Exceção</button><span class="mini">ou uma exceção por mês para</span><select id="meta-mm-tribo" class="metas-sel"><option value="">todas as tribos</option>${tribos.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select><button class="btn o xs" data-click="metaMesAMes">Preencher mês a mês</button></div>
-        <div class="mini" style="margin-top:10px">Exemplo: meta de jan/26 = mediana da tribo em jan/26–jun/26 e meta de fev/26 = mediana em jan/26–mar/26: duas exceções com "Mês da meta" jan/26 e fev/26. Tribo com menos de ${Calc.MIN_TRIBO} pessoas na janela usa a mediana da base inteira.</div></div></div>
-      <div class="card fill"><div class="card-hdr"><div><div class="card-title">Metas resultantes (h/mês por dev)</div><div class="card-sub">tribo × mês da meta · passe o mouse para ver a janela · * = mediana da base inteira</div></div></div>
+        <div class="mini" style="margin-top:10px">Exemplo: meta de jan/26 = mediana da tribo em jan/26–jun/26 e meta de fev/26 = mediana em jan/26–mar/26: duas exceções com "Mês da meta" jan/26 e fev/26. Tribo com menos de ${Calc.MIN_TRIBO} pessoas na janela usa o mesmo percentil na base inteira.</div></div></div>
+      <div class="card fill"><div class="card-hdr"><div><div class="card-title">Metas resultantes (h/mês por dev)</div><div class="card-sub">tribo × mês da meta · passe o mouse para ver a janela · * = percentil da base inteira</div></div></div>
         <div class="card-body"><div class="tbl-wrap fill" style="overflow:auto"><table class="tbl compacta ia-int" id="metas-tab"><thead><tr><th>Tribo</th>${ctx.meses.map(y => `<th class="num">${U.fmtMes(y)}</th>`).join('')}</tr></thead><tbody>${linhas}</tbody></table></div></div></div></div>`;
   }
   function htmlParametros(p) {
@@ -1988,7 +1997,7 @@ const UI = (() => {
       <div class="fl"><label>Detrator: até (% da régua)</label><input type="number" min="1" max="99" value="${pr.limiarDetrator}" data-act="param" data-k="limiarDetrator"></div>
       <div class="fl"><label>Impulsionador: acima de (% da régua)</label><input type="number" min="100" max="999" value="${pr.limiarImpulsionador}" data-act="param" data-k="limiarImpulsionador"></div></div>
       <div class="card-body note" style="padding-top:0">
-        <b>Regras fixas nesta versão</b><br>• Entrega estimada = soma das horas estimadas líquidas (retrabalho já zerado pelo motor; merges e duplicatas já excluídos).<br>• Produtividade = horas líquidas ÷ meses completos. Meta da tribo no mês = produtividade mediana das pessoas da tribo numa janela de meses, sobre a base inteira (Dados e cadastro › Metas; padrão = todos os meses completos; mínimo ${Calc.MIN_TRIBO} pessoas, senão mediana da base). Meta do perímetro = média da meta de cada dev, ponderada por dev-mês. Classificação = produtividade da pessoa no período ÷ média das metas mensais da tribo dela. No gráfico mensal, horas da pessoa no mês ÷ meta da tribo no mês.<br>• Horas por desenvolvedor no mês = horas líquidas do mês ÷ desenvolvedores do mês (quem comitou + cadastrados vigentes, em mês completo).<br>• Variação = atual ÷ anterior − 1 na janela escolhida, só meses completos; base zero ou ausente → "Não calculável".<br>• Referência = mediana e P25–P75 de uma observação por pessoa do universo; individual exclui a própria pessoa. O filtro "pessoa em análise" não reduz o universo.<br>• Universo = quem comitou no recorte + pessoas cadastradas vigentes em mês completo (entrega zero).<br>• Atributos cadastrais são lidos pela data de cada commit; um atributo que muda dentro do período não entra em grupo de pares.<br>• Cobertura por origem × repositório: um mês só é completo quando todos os repositórios do recorte estão cobertos por inteiro.<br>• Identidade da pessoa: origem + "Autor (Usuário)", vinculada ao ID cadastral pelos aliases; homônimos não são unidos automaticamente.<br>• Tabelas mostram as linhas que cabem na tela e paginam o restante.</div></div>
+        <b>Regras fixas nesta versão</b><br>• Entrega estimada = soma das horas estimadas líquidas (retrabalho já zerado pelo motor; merges e duplicatas já excluídos).<br>• Produtividade = horas líquidas ÷ meses completos. Meta da tribo no mês = percentil escolhido (padrão: mediana; P25 ou P75 em Dados e cadastro › Metas) da produtividade das pessoas da tribo numa janela de meses, sobre a base inteira (padrão = todos os meses completos; mínimo ${Calc.MIN_TRIBO} pessoas, senão o mesmo percentil na base). Meta do perímetro = média da meta de cada dev, ponderada por dev-mês. Classificação = produtividade da pessoa no período ÷ média das metas mensais da tribo dela. No gráfico mensal, horas da pessoa no mês ÷ meta da tribo no mês.<br>• Horas por desenvolvedor no mês = horas líquidas do mês ÷ desenvolvedores do mês (quem comitou + cadastrados vigentes, em mês completo).<br>• Variação = atual ÷ anterior − 1 na janela escolhida, só meses completos; base zero ou ausente → "Não calculável".<br>• Referência = mediana e P25–P75 de uma observação por pessoa do universo; individual exclui a própria pessoa. O filtro "pessoa em análise" não reduz o universo.<br>• Universo = quem comitou no recorte + pessoas cadastradas vigentes em mês completo (entrega zero).<br>• Atributos cadastrais são lidos pela data de cada commit; um atributo que muda dentro do período não entra em grupo de pares.<br>• Cobertura por origem × repositório: um mês só é completo quando todos os repositórios do recorte estão cobertos por inteiro.<br>• Identidade da pessoa: origem + "Autor (Usuário)", vinculada ao ID cadastral pelos aliases; homônimos não são unidos automaticamente.<br>• Tabelas mostram as linhas que cabem na tela e paginam o restante.</div></div>
       <div class="card"><div class="card-hdr"><div><div class="card-title">Cabeçalho da aplicação</div><div class="card-sub">aparece na barra superior e nas exportações</div></div></div><div class="card-body form">
       <div class="fl"><label>Projeto</label><input type="text" value="${esc(cab.projeto || '')}" data-act="cab" data-k="projeto"></div>
       <div class="fl"><label>Cliente</label><input type="text" value="${esc(cab.cliente || '')}" data-act="cab" data-k="cliente" placeholder="Gradus"></div>
@@ -2071,12 +2080,13 @@ const UI = (() => {
     reguaMes: el => { const rp = { ...(App.projeto.analise.reguaPeriodo || {}) }; rp[el.dataset.k] = el.value; if (!rp.mesIni) rp.mesIni = App.projeto.analise.filtros.mesIni; if (!rp.mesFim) rp.mesFim = App.projeto.analise.filtros.mesFim; if (rp.mesIni > rp.mesFim) { if (el.dataset.k === 'mesIni') rp.mesFim = rp.mesIni; else rp.mesIni = rp.mesFim; } App.setAnalise({ reguaPeriodo: rp }); },
     reguaIgual: () => App.setAnalise({ reguaPeriodo: { mesIni: null, mesFim: null } }),
     irMetas: () => App.irPara('dados', 'metas'),
+    metaPercentil: el => { const m = metasEdit(); m.percentil = +el.dataset.k; App.setParametros({ metas: m }); },
     metaPadrao: el => { const m = metasEdit(), k = el.dataset.k; m.padrao[k] = el.value || null; if (m.padrao.mesIni && m.padrao.mesFim && m.padrao.mesIni > m.padrao.mesFim) m.padrao[k === 'mesIni' ? 'mesFim' : 'mesIni'] = el.value; App.setParametros({ metas: m }); },
-    metaRegra: el => { const m = metasEdit(), r = m.regras[+el.dataset.i], c = el.dataset.c; if (!r) return; r[c] = el.value; if (r.mesIni > r.mesFim) { if (c === 'mesIni') r.mesFim = r.mesIni; else if (c === 'mesFim') r.mesIni = r.mesFim; } App.setParametros({ metas: m }); },
-    addMeta: () => { const m = metasEdit(), j = App.ctx.metas.padrao(); m.regras.push({ tribo: '', mes: '', mesIni: j.mesIni, mesFim: j.mesFim }); App.setParametros({ metas: m }); },
+    metaRegra: el => { const m = metasEdit(), r = m.regras[+el.dataset.i], c = el.dataset.c; if (!r) return; r[c] = c === 'percentil' ? (el.value ? +el.value : '') : el.value; if (r.mesIni > r.mesFim) { if (c === 'mesIni') r.mesFim = r.mesIni; else if (c === 'mesFim') r.mesIni = r.mesFim; } App.setParametros({ metas: m }); },
+    addMeta: () => { const m = metasEdit(), j = App.ctx.metas.padrao(); m.regras.push({ tribo: '', mes: '', mesIni: j.mesIni, mesFim: j.mesFim, percentil: '' }); App.setParametros({ metas: m }); },
     delMeta: el => { const m = metasEdit(); m.regras.splice(+el.dataset.i, 1); App.setParametros({ metas: m }); },
     metaMesAMes: () => { const m = metasEdit(), t = (U.el('meta-mm-tribo') || {}).value || '', j = App.ctx.metas.padrao(); let n = 0;
-      for (const y of App.ctx.meses) if (!m.regras.some(r => (r.tribo || '') === t && r.mes === y)) { m.regras.push({ tribo: t, mes: y, mesIni: j.mesIni, mesFim: j.mesFim }); n++; }
+      for (const y of App.ctx.meses) if (!m.regras.some(r => (r.tribo || '') === t && r.mes === y)) { m.regras.push({ tribo: t, mes: y, mesIni: j.mesIni, mesFim: j.mesFim, percentil: '' }); n++; }
       App.setParametros({ metas: m }); toast(`${n} exceção(ões) mês a mês criadas${t ? ` para ${t}` : ''}: ajuste a janela de cada mês.`, 'ok'); },
     limparMetas: async () => { if (await App.confirmar('Voltar as metas ao padrão (mediana da tribo em todos os meses completos) e apagar as exceções?')) App.setParametros({ metas: Modelo.METAS_PADRAO() }); },
     /* abrir/fechar o painel sem recalcular a tela (com bases grandes, recalcular custa segundos) */
@@ -2350,7 +2360,7 @@ Observações da aplicação:
 - ganho_conservador_h_mes, ganho_potencial_h_mes e fte_equivalente de cada grupo já foram calculados pela aplicação com as fórmulas da instrução; use-os em vez de recalcular. Os grupos de níveis diferentes se sobrepõem (um squad está contido na sua tribo ou empresa): não some ganhos entre eles no resumo.
 - Em "metricas", copie os valores exatamente como estão na entrada, sem calcular diferenças. A aplicação confere cada valor (e os números do texto) e descarta o insight com valor ausente.
 - "fluxo_mr" e "revisoes" são nulos: os dados atuais só têm commits.
-- A meta (régua) de cada dev é a mediana da tribo dele, definida por mês e igual em todo o relatório. plano_meta traz, por grupo, o realizado e a meta em h/mês·dev e as horas por mês que faltam para a meta; use-o em acoes_por_grupo.
+- A meta (régua) de cada dev é um percentil da produtividade da tribo dele (descrito no campo meta.meta), definido por mês e igual em todo o relatório. plano_meta traz, por grupo, o realizado e a meta em h/mês·dev e as horas por mês que faltam para a meta; use-o em acoes_por_grupo.
 - Proporções (campos _pct, share, variacao, razao_regua, limiares) estão em fração decimal: 0,12 = 12%.
 - h_mes_dev de um grupo é a média da produtividade das pessoas do grupo (h/mês); nos totais e na série mensal é horas do mês ÷ desenvolvedores do mês.
 - Pessoas vêm pseudonimizadas (P-0001). Grupos com nome "(sem … ou mudou no período)" reúnem quem não tem o atributo no cadastro ou trocou de valor dentro do período.
@@ -3180,9 +3190,12 @@ const App = (() => {
         ok(Math.abs(m1 - m0) > 1e-9 && Math.abs(m2 - m0) < 1e-9 && U.ok(mo), 'exceção de tribo e mês vale só para aquela tribo naquele mês; o resto segue a janela padrão', [m0, m1, m2].join(' / '));
         await setFiltros({ empresa: ['Fábrica Alfa'] });
         ok(A.ctx.metas.metaDe('2026-03', 'Vendas').regua === m1, 'meta não muda com os filtros (estática no relatório)');
-        await limparFiltros(); }
+        await limparFiltros();
+        const q50 = A.ctx.metas.metaDe('2026-04', 'Vendas').regua, mm = JSON.parse(JSON.stringify(A.projeto.parametros.metas)); mm.percentil = 0.75; await setParametros({ metas: mm });
+        const q75 = A.ctx.metas.metaDe('2026-04', 'Vendas').regua;
+        ok(q75 > q50 && /P75/.test(UI.descMeta(UI.recorte())), 'percentil da meta ajustável em quartis: P75 acima da mediana e descrito nos textos', [q50, q75].join(' / ')); }
       irPara('dados', 'metas');
-      ok(/Metas resultantes/.test(txt('sec-dados')) && document.querySelectorAll('#metas-tab tbody tr').length === 3 && document.querySelectorAll('.metas-regras tbody select').length === 4 && semRolagem(), 'aba Metas: exceção editável e tabela tribo × mês (2 tribos + base inteira), sem rolagem');
+      ok(/Metas resultantes/.test(txt('sec-dados')) && document.querySelectorAll('#metas-tab tbody tr').length === 3 && document.querySelectorAll('.metas-regras tbody select').length === 5 && document.querySelectorAll('[data-click="metaPercentil"]').length === 3 && semRolagem(), 'aba Metas: percentil em quartis, exceção editável e tabela tribo × mês (2 tribos + base inteira), sem rolagem');
       irPara('geral'); irPagina('geral', 2);
       await setParametros({ metas: Modelo.METAS_PADRAO() });
       ok(txt('ch-cat-sub') === subAntes, 'voltar ao padrão restaura a meta original');
