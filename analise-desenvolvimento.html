@@ -333,6 +333,11 @@ th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--text)}
 .kpi-label{flex-wrap:wrap;row-gap:4px}.kpi-label .seg{flex:none}
 .metas-pct{display:inline-flex;align-items:center;gap:6px;margin-left:6px}
 .pl-grid{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.7fr);gap:16px}.pl-grid>*{min-height:0}
+/* Detalhamento › Commits e Cards: gráfico à esquerda, commits e cards empilhados à direita */
+.cc-grid{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.45fr);gap:12px}.cc-grid>*{min-height:0}
+.cc-grid .card-hdr .legend{margin:0}.cc-tabs .tbl td{max-width:220px}.cc-tabs .tbl td.wrap{max-width:300px}
+.cc-tabs{min-height:0;display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:12px}.cc-tabs>*{min-height:0}
+.cc-busca{margin:0;width:180px}
 .tbl td.pl-acao{white-space:normal;max-width:340px;min-width:200px;line-height:1.35;padding-top:4px;padding-bottom:4px}
 #pl-tab td{height:36px}#pl-tab a{color:var(--text-strong);text-decoration:none;font-weight:600}#pl-tab a:hover{color:var(--primary);text-decoration:underline}
 .metas-padrao{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px}
@@ -441,7 +446,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 </main>
 
 <div id="toasts" aria-live="polite"></div>
-<footer class="wm">Gradus Consultoria · processamento local no navegador; só a aba Insights IA envia dados, agregados e com pessoas pseudonimizadas, à API da Anthropic · <span id="rodape-versao">v1.4.0 · 25/09/2026</span></footer>
+<footer class="wm">Gradus Consultoria · processamento local no navegador; só a aba Insights IA envia dados, agregados e com pessoas pseudonimizadas, à API da Anthropic · <span id="rodape-versao">v1.5.0 · 30/09/2026</span></footer>
 
 <script>'use strict';
 /* Utilitários: formatação PT-BR, datas sem fuso (tudo em componentes UTC),
@@ -542,12 +547,14 @@ const Modelo = (() => {
   const FILTROS_PADRAO = () => ({ mesIni: null, mesFim: null, pessoas: [], repos: [], stacks: [], senioridade: [], natureza: [], empresa: [], tribo: [], squad: [] });
   /* metas: janela padrão (vazia = base inteira) + exceções { tribo: '' | nome, mes: '' | 'AAAA-MM', mesIni, mesFim } */
   const METAS_PADRAO = () => ({ padrao: { mesIni: null, mesFim: null }, percentil: 0.5, regras: [] });
+  /* cards do Kanban: registros por (card, pessoa, janela), commit → códigos citados e janelas dos extratos, com a fonte de cada um */
+  const CARDS_PADRAO = () => ({ fontes: [], registros: {}, commitCard: {}, janelas: {} });
 
   function novoProjeto(nome) {
     const agora = U.hojeISO();
     return {
       id: U.uid(), versao: VERSAO_PROJETO, nome: nome || 'Projeto sem nome', criadoEm: agora, atualizadoEm: agora,
-      fontes: [], commits: {}, auditoria: [], configAtiva: null,
+      fontes: [], commits: {}, atividades: {}, auditoria: [], configAtiva: null, cards: CARDS_PADRAO(),
       cadastros: { pessoas: [] }, cadastroOrigem: null,
       parametros: { minPares: 5, topN: 3, limiarDetrator: 80, limiarImpulsionador: 110, metas: METAS_PADRAO(), cabecalho: { projeto: 'Análise de desenvolvimento', cliente: '', pacote: 'Análise de Commits' } },
       analise: { modo: 'geral', criterios: { ...CRITERIOS_PADRAO }, agrupamento: 'autor', filtros: FILTROS_PADRAO(),
@@ -625,7 +632,8 @@ const Modelo = (() => {
     if (!p.analise.janelaVariacao) p.analise.janelaVariacao = 'mes';
     delete p.analise.metrica;
     p.cenarios = p.cenarios || base.cenarios;
-    p.fontes = p.fontes || []; p.commits = p.commits || {}; p.auditoria = p.auditoria || [];
+    p.fontes = p.fontes || []; p.commits = p.commits || {}; p.atividades = p.atividades || {}; p.auditoria = p.auditoria || [];
+    p.cards = Object.assign(CARDS_PADRAO(), p.cards && typeof p.cards === 'object' ? p.cards : {});
     p.versao = VERSAO_PROJETO;
     return p;
   }
@@ -744,7 +752,7 @@ const Modelo = (() => {
     return wb;
   }
 
-  return { VERSAO_PROJETO, FORMATO_BACKUP, DB_NOME, CAD, CRITERIOS_PADRAO, FILTROS_PADRAO, METAS_PADRAO, novoProjeto, migrar,
+  return { VERSAO_PROJETO, FORMATO_BACKUP, DB_NOME, CAD, CRITERIOS_PADRAO, FILTROS_PADRAO, METAS_PADRAO, CARDS_PADRAO, novoProjeto, migrar,
     disponivel, salvarProjeto, carregarProjeto, excluirProjeto, listarProjetos, getConfig, setConfig,
     exportarBackup, importarBackup, lerCadastro, validarCadastros, aplicarCadastro, gerarModeloCadastro, exportarCadastros };
 })();
@@ -765,7 +773,13 @@ const Importador = (() => {
   const ABAS = {
     historico: ['historico de commits'], commits: ['commits'], total: ['quantidade total de commits'],
     resumoAutor: ['resumo por autor'], stacks: ['stacks'],
+    histAtv: ['historico de atividades'], atv: ['atividades fora do commit'], parametros: ['parametros'],
   };
+  /* "Atividades fora do commit" / "Histórico de atividades": revisão, integração e reexecução de CI por MR */
+  const COLS_ATV = { data: ['data gmt', 'data'], tipo: ['tipo'], usuario: ['pessoa usuario', 'usuario'], nome: ['pessoa nome', 'nome'], conta: ['conta gitlab', 'conta'],
+    repo: ['repositorio'], mr: ['mr'], urlMr: ['url do mr', 'url'], base: ['base do calculo'], horas: ['horas'], pipeline: ['pipeline'], execucao: ['execucao'] };
+  const TIPOS_ATV = ['revisao', 'integracao', 'ci'];
+  function tipoAtv(v) { const n = U.normHeader(v); return /^revis/.test(n) ? 'revisao' : /^integr/.test(n) ? 'integracao' : /reexec|\bci\b|pipeline/.test(n) ? 'ci' : null; }
   const COLS = {
     data: ['data gmt', 'data'], categoria: ['categoria'], linguagem: ['linguagem', 'stack'], repo: ['repositorio'],
     resumo: ['resumo'], autorNome: ['autor nome', 'autor'], autorUsuario: ['autor usuario', 'usuario', 'e mail', 'email'],
@@ -877,6 +891,8 @@ const Importador = (() => {
       }
     }
 
+    const atv = _lerAtividades(wb, avisos), parametrosMotor = _lerParametros(wb);
+
     // estatísticas da leitura
     const configs = {};
     for (const r of regs) {
@@ -892,9 +908,43 @@ const Importador = (() => {
       periodo: { inicio: datas[0].slice(0, 10), fim: datas[datas.length - 1].slice(0, 10) },
       configuracoes: Object.values(configs).map(c => ({ key: c.key, motor: c.motor, contexto: c.contexto, linhas: c.linhas, horasLiq: U.round(c.horasLiq),
         execucoes: [...c.execucoes].sort(), inicio: c.min.slice(0, 10), fim: c.max.slice(0, 10) })),
-      auditoriaLinhas: auditoria.length,
+      auditoriaLinhas: auditoria.length, abaAtividades: atv.aba, atividadesLidas: atv.registros.length, parametrosMotor,
     };
-    return { fonte, registros: regs, auditoria, avisos, erros };
+    return { fonte, registros: regs, auditoria, atividades: atv.registros, avisos, erros };
+  }
+
+  /* Atividades fora do commit. Como nos commits, o histórico (acumulado) prevalece sobre a aba da execução corrente.
+     Identidade do evento: origem do MR + repositório + MR + tipo + pessoa + data + pipeline. */
+  function _lerAtividades(wb, avisos) {
+    const vazio = { aba: null, registros: [] };
+    const abaHist = _achaAba(wb, ABAS.histAtv), abaAtv = _achaAba(wb, ABAS.atv);
+    const temLinhas = n => n && _lerLinhas(wb.Sheets[n]).some((r, i) => i > 0 && !_vazia(r));
+    const aba = temLinhas(abaHist) ? abaHist : temLinhas(abaAtv) ? abaAtv : null;
+    if (!aba) return vazio;
+    const linhas = _lerLinhas(wb.Sheets[aba]), pos = _mapear(linhas[0], COLS_ATV);
+    const faltam = ['data', 'tipo', 'horas', 'usuario'].filter(k => pos[k] === undefined);
+    if (faltam.length) { avisos.push(`Aba "${aba}": colunas ausentes (${faltam.join(', ')}); atividades fora do commit não importadas.`); return vazio; }
+    const g = (row, k) => pos[k] === undefined ? null : row[pos[k]], txt = (row, k) => String(g(row, k) ?? '').trim();
+    const regs = [], porChave = new Map(); let semTipo = 0, invalidas = 0, repetidas = 0;
+    for (let i = 1; i < linhas.length; i++) {
+      const row = linhas[i]; if (_vazia(row)) continue;
+      const tipo = tipoAtv(g(row, 'tipo')); if (!tipo) { semTipo++; continue; }
+      const d = U.toDate(g(row, 'data')), horas = U.numSimples(g(row, 'horas')), usuario = txt(row, 'usuario') || txt(row, 'conta');
+      if (!d || !U.ok(horas) || !usuario) { invalidas++; continue; }
+      const urlMr = txt(row, 'urlMr'), origem = U.hostDe(urlMr) || 'origem-nao-informada', repo = txt(row, 'repo'), mr = txt(row, 'mr'), pipeline = txt(row, 'pipeline'), exec = U.toDate(g(row, 'execucao'));
+      const r = { tipo, data: U.iso(d), ym: U.ym(d), usuario, nome: txt(row, 'nome'), conta: txt(row, 'conta'), repo, mr, urlMr, origem, base: txt(row, 'base'), horas, pipeline, execucao: exec ? U.iso(exec) : '' };
+      r.key = `${origem}|${repo}|${mr}|${tipo}|${U.norm(usuario)}|${r.data}|${pipeline}`;
+      if (porChave.has(r.key)) { repetidas++; regs[porChave.get(r.key)] = r; } else { porChave.set(r.key, regs.length); regs.push(r); }
+    }
+    if (semTipo) avisos.push(`Atividades fora do commit: ${semTipo} linha(s) com tipo diferente de Revisão, Integração ou Reexecução de CI ignoradas.`);
+    if (invalidas) avisos.push(`Atividades fora do commit: ${invalidas} linha(s) sem data, horas ou pessoa ignoradas.`);
+    if (repetidas) avisos.push(`Atividades fora do commit: ${repetidas} linha(s) repetidas no arquivo; mantida a última de cada.`);
+    return { aba, registros: regs };
+  }
+  /* aba "Parâmetros" do motor (pares parâmetro → valor), guardada na fonte para a aba de premissas */
+  function _lerParametros(wb) {
+    const aba = _achaAba(wb, ABAS.parametros); if (!aba) return [];
+    return _lerLinhas(wb.Sheets[aba]).slice(1).filter(r => !_vazia(r) && r[0] !== null && r[0] !== '').map(r => [String(r[0]).trim(), String(r[1] ?? '').trim()]);
   }
 
   /* Mescla a leitura no projeto. Estimativas são versionadas pelo carimbo de
@@ -926,6 +976,15 @@ const Importador = (() => {
       c.estimativas[r.configKey] = nova;
       if (igual) rel.substituidasIguais++; else rel.substituidasAlteradas++;
     }
+    // atividades fora do commit: independem da base de estimativas; versão pelo carimbo de execução, como os commits
+    projeto.atividades = projeto.atividades || {};
+    rel.atvNovas = 0; rel.atvAtualizadas = 0; rel.atvIgnoradasAntigas = 0;
+    for (const a of (leitura.atividades || [])) {
+      const atual = projeto.atividades[a.key];
+      if (atual && a.execucao && atual.execucao && a.execucao < atual.execucao) { rel.atvIgnoradasAntigas++; continue; }
+      if (atual) rel.atvAtualizadas++; else rel.atvNovas++;
+      projeto.atividades[a.key] = { ...a, fonteId };
+    }
     // escopos do arquivo: a cobertura declarada vale para estes (origem, repositório, configuração)
     const esc = new Map();
     for (const r of leitura.registros) esc.set(`${r.origem}|${r.repo}|${r.configKey}`, { origem: r.origem, repo: r.repo, configKey: r.configKey });
@@ -935,7 +994,7 @@ const Importador = (() => {
     projeto.fontes.push({ id: fonteId, nomeArquivo: f.nomeArquivo, importadoEm: U.hojeISO(), abaUsada: f.abaUsada, motivoAba: f.motivoAba,
       abasPresentes: f.abasPresentes, linhasLidas: f.linhasLidas, origens: f.origens, configuracoes: f.configuracoes,
       cobertura: { inicio: f.periodo.inicio, fim: f.periodo.fim, editada: false }, escopos: [...esc.values()], demo: !!opts.demo, incluida: true, relatorio: rel,
-      avisos: leitura.avisos });
+      abaAtividades: f.abaAtividades || null, atividadesLidas: f.atividadesLidas || 0, parametrosMotor: f.parametrosMotor || [], avisos: leitura.avisos });
     if (!projeto.configAtiva || !configsDisponiveis(projeto).some(c => c.key === projeto.configAtiva)) {
       const cs = configsDisponiveis(projeto); if (cs.length) projeto.configAtiva = cs.sort((a, b) => b.linhas - a.linhas)[0].key;
     }
@@ -956,13 +1015,78 @@ const Importador = (() => {
       for (const [k, e] of Object.entries(c.estimativas)) if (e.fonteId === fonteId) delete c.estimativas[k];
       if (!Object.keys(c.estimativas).length) delete projeto.commits[key];
     }
+    for (const [k, a] of Object.entries(projeto.atividades || {})) if (a.fonteId === fonteId) delete projeto.atividades[k];
     projeto.auditoria = projeto.auditoria.filter(a => a.fonteId !== fonteId);
     projeto.fontes = projeto.fontes.filter(f => f.id !== fonteId);
     const cs = configsDisponiveis(projeto);
     if (!cs.some(c => c.key === projeto.configAtiva)) projeto.configAtiva = cs.length ? cs.sort((a, b) => b.linhas - a.linhas)[0].key : null;
   }
 
-  return { lerArquivo, mesclar, removerFonte, configsDisponiveis, configKey, rotuloConfig, rotuloMotor, sha12 };
+  // ── cards do Kanban (arquivo "Commits × Cards Kanban") ─────────────────
+  /* Aba "Cards": uma linha por card movimentado × pessoa responsável × janela do extrato. Aba "Commits" (opcional):
+     código do card citado na mensagem de cada commit. Aba "Janelas" (opcional): período de cada extrato. */
+  const COLS_CARD = { idPessoa: ['id pessoa'], pessoa: ['pessoa'], usuario: ['autor usuario', 'usuario', 'e mail', 'email'], tribo: ['tribo'], squad: ['squad'],
+    vinculo: ['vinculo kanban'], mes: ['mes'], janela: ['janela'], codigo: ['codigo'], tipo: ['tipo'], titulo: ['card', 'titulo'], criadoEm: ['criado em'],
+    criadoNoMes: ['criado no mes'], pai: ['card pai'], epico: ['epico'], iniciativa: ['iniciativa'], nResp: ['responsaveis'], outros: ['outros responsaveis'],
+    descricao: ['descricao inicio', 'descricao'], idCard: ['id do card'], contaNoMes: ['conta no mes'] };
+  const COLS_CC = { sha: ['sha'], codigo: ['codigo citado'], idCard: ['id do card citado'] };
+  function lerCards(conteudo, nomeArquivo) {
+    const avisos = [];
+    let wb; try { wb = XLSX.read(conteudo, { type: 'array' }); } catch (e) { return { erros: [`Não foi possível abrir "${nomeArquivo}": ${e.message}`], avisos }; }
+    let aba = _achaAba(wb, ['cards']);
+    if (!aba) for (const n of wb.SheetNames) { const l = _lerLinhas(wb.Sheets[n]); if (l.length && (p => p.codigo !== undefined && p.mes !== undefined && p.titulo !== undefined)(_mapear(l[0], COLS_CARD))) { aba = n; break; } }
+    if (!aba) return { erros: [`"${nomeArquivo}": nenhuma aba "Cards" (ou aba com as colunas Código, Card e Mês). Abas encontradas: ${wb.SheetNames.join(', ')}.`], avisos };
+    const linhas = _lerLinhas(wb.Sheets[aba]), pos = _mapear(linhas[0] || [], COLS_CARD);
+    const faltam = [['mes', 'Mês'], ['titulo', 'Card']].filter(([k]) => pos[k] === undefined).map(([, r]) => r);
+    if (pos.codigo === undefined && pos.idCard === undefined) faltam.push('Código ou ID do card');
+    if (pos.usuario === undefined && pos.idPessoa === undefined) faltam.push('Autor (Usuário) ou ID pessoa');
+    if (faltam.length) return { erros: [`Aba "${aba}": colunas obrigatórias ausentes: ${faltam.join(', ')}. Cabeçalho lido: ${(linhas[0] || []).filter(Boolean).join(' | ')}`], avisos };
+    const g = (row, k) => pos[k] === undefined ? null : row[pos[k]], txt = (row, k) => String(g(row, k) ?? '').trim();
+    const regs = [], porChave = new Map(); let invalidas = 0, repetidas = 0;
+    for (let i = 1; i < linhas.length; i++) {
+      const row = linhas[i]; if (_vazia(row)) continue;
+      const mes = U.parseYM(g(row, 'mes')), codigo = txt(row, 'codigo'), idCard = txt(row, 'idCard'), usuario = txt(row, 'usuario'), idPessoa = txt(row, 'idPessoa');
+      if (!mes || !(codigo || idCard) || !(usuario || idPessoa)) { invalidas++; continue; }
+      const cr = U.toDate(g(row, 'criadoEm'));
+      const r = { mes, janela: txt(row, 'janela'), codigo: codigo || idCard.slice(-4), idCard, usuario, idPessoa, pessoa: txt(row, 'pessoa'), tribo: txt(row, 'tribo'), squad: txt(row, 'squad'),
+        vinculo: txt(row, 'vinculo'), tipo: txt(row, 'tipo'), titulo: txt(row, 'titulo'), criadoEm: cr ? U.iso(cr) : '', criadoNoMes: U.norm(g(row, 'criadoNoMes')) === 'sim',
+        pai: txt(row, 'pai'), epico: txt(row, 'epico'), iniciativa: txt(row, 'iniciativa'), nResp: U.numSimples(g(row, 'nResp')), outros: txt(row, 'outros'), descricao: txt(row, 'descricao').slice(0, 400) };
+      r.key = `${idCard || codigo}|${idPessoa || U.norm(usuario)}|${r.janela || mes}`;
+      if (porChave.has(r.key)) { repetidas++; regs[porChave.get(r.key)] = r; } else { porChave.set(r.key, regs.length); regs.push(r); }
+    }
+    if (invalidas) avisos.push(`${invalidas} linha(s) sem mês, card ou pessoa ignoradas.`);
+    if (repetidas) avisos.push(`${repetidas} linha(s) repetidas (mesmo card, pessoa e janela); mantida a última de cada.`);
+    if (!regs.length) return { erros: [`Aba "${aba}" não tem linhas válidas.`], avisos };
+    // commit → códigos de card citados na mensagem
+    const commitCard = {}, abaC = _achaAba(wb, ['commits']);
+    if (abaC) { const lc = _lerLinhas(wb.Sheets[abaC]), pc = _mapear(lc[0] || [], COLS_CC);
+      if (pc.sha !== undefined && pc.codigo !== undefined) for (let i = 1; i < lc.length; i++) { const row = lc[i]; if (_vazia(row)) continue;
+        const s = sha12(row[pc.sha]), cods = String(row[pc.codigo] ?? '').split(/\s*[|;,]\s*/).map(x => x.trim()).filter(Boolean); if (s && cods.length) commitCard[s] = cods; } }
+    const janelas = {}, abaJ = _achaAba(wb, ['janelas']);
+    if (abaJ) _lerLinhas(wb.Sheets[abaJ]).slice(1).forEach(r => { if (_vazia(r) || !r[0]) return; const a = U.toDate(r[1]), b = U.toDate(r[2]); janelas[String(r[0]).trim()] = { inicio: a ? U.ymd(a) : '', fim: b ? U.ymd(b) : '' }; });
+    const meses = regs.map(r => r.mes).sort();
+    return { erros: [], avisos, registros: regs, commitCard, janelas,
+      fonte: { nomeArquivo, abaUsada: aba, linhas: regs.length, cards: new Set(regs.map(r => r.idCard || r.codigo)).size, pessoas: new Set(regs.map(r => r.idPessoa || U.norm(r.usuario))).size,
+        commitsCitando: Object.keys(commitCard).length, periodo: { inicio: meses[0], fim: meses[meses.length - 1] } } };
+  }
+  function mesclarCards(projeto, L) {
+    const c = projeto.cards = Object.assign(Modelo.CARDS_PADRAO(), projeto.cards || {}), fonteId = U.uid();
+    let novos = 0, atualizados = 0;
+    for (const r of L.registros) { if (c.registros[r.key]) atualizados++; else novos++; c.registros[r.key] = { ...r, fonteId }; }
+    for (const [s, cods] of Object.entries(L.commitCard)) c.commitCard[s] = { c: cods, f: fonteId };
+    Object.assign(c.janelas, L.janelas);
+    c.fontes.push({ id: fonteId, ...L.fonte, importadoEm: U.hojeISO(), novos, atualizados, avisos: L.avisos });
+    return { novos, atualizados };
+  }
+  function removerFonteCards(projeto, fonteId) {
+    const c = projeto.cards; if (!c) return;
+    for (const [k, r] of Object.entries(c.registros)) if (r.fonteId === fonteId) delete c.registros[k];
+    for (const [k, r] of Object.entries(c.commitCard)) if (r.f === fonteId) delete c.commitCard[k];
+    c.fontes = c.fontes.filter(f => f.id !== fonteId);
+    if (!c.fontes.length) c.janelas = {};
+  }
+
+  return { lerArquivo, mesclar, removerFonte, configsDisponiveis, configKey, rotuloConfig, rotuloMotor, sha12, TIPOS_ATV, tipoAtv, lerCards, mesclarCards, removerFonteCards };
 })();
 </script>
 <script>'use strict';
@@ -989,6 +1113,7 @@ const Calc = (() => {
 
   // ── identidades (com versões por vigência) ───────────────────────────────
   function aliasDe(c) { const u = U.norm(c.autorUsuario) || U.norm(c.autorNome) || '?'; return c.origem + '::' + u; }
+  function aliasAtv(a) { return a.origem + '::' + (U.norm(a.usuario) || U.norm(a.conta) || '?'); }
   function resolverPessoas(projeto) {
     const cad = projeto.cadastros, exato = new Map(), porUsuario = new Map(), pessoas = new Map(), aliasPessoa = new Map();
     for (const p of cad.pessoas) {
@@ -1007,6 +1132,15 @@ const Calc = (() => {
         if (!pessoas.has(pid)) pessoas.set(pid, { id: pid, nome: '', cadastrada: false, versoes: [], aliases: new Set(), nomesGit: {} });
       }
       const p = pessoas.get(pid); p.aliases.add(ak); if (c.autorNome) p.nomesGit[c.autorNome] = (p.nomesGit[c.autorNome] || 0) + 1;
+    }
+    /* atividades fora do commit: mesma identidade (origem + usuário); se o usuário não aparece nos commits, tenta a conta do GitLab */
+    for (const a of Object.values(projeto.atividades || {})) {
+      const ak = aliasAtv(a); if (aliasPessoa.has(ak)) continue;
+      const conta = a.conta ? a.origem + '::' + U.norm(a.conta) : '';
+      let pid = (conta && aliasPessoa.get(conta)) || exato.get(ak) || porUsuario.get(ak.split('::')[1]) || (a.conta && porUsuario.get(U.norm(a.conta)));
+      if (!pid) { pid = 'auto:' + ak; if (!pessoas.has(pid)) pessoas.set(pid, { id: pid, nome: '', cadastrada: false, versoes: [], aliases: new Set(), nomesGit: {} }); }
+      aliasPessoa.set(ak, pid);
+      const p = pessoas.get(pid); if (!p.aliases.size && a.nome) p.nomesGit[a.nome] = (p.nomesGit[a.nome] || 0) + 1;
     }
     for (const p of pessoas.values()) if (!p.cadastrada) {
       const ns = Object.entries(p.nomesGit).sort((a, b) => b[1] - a[1]);
@@ -1056,10 +1190,29 @@ const Calc = (() => {
         autorNome: c.autorNome, autorUsuario: c.autorUsuario, stack: c.linguagem || '(sem)', categoria: c.categoria, resumo: c.resumo,
         insercoes: c.insercoes, delecoes: c.delecoes, horas: e.horas, horasLiq: e.horasLiq, horasRet: e.horasRet, retrabalho: e.retrabalho,
         risco: e.risco, justificativa: e.justificativa, execucao: e.execucao, fonteId: e.fonteId,
-        empresa: atributoEm(p, 'empresa', ymd), tribo: atributoEm(p, 'tribo', ymd), squad: atributoEm(p, 'squad', ymd) });
+        empresa: atributoEm(p, 'empresa', ymd), tribo: atributoEm(p, 'tribo', ymd), squad: atributoEm(p, 'squad', ymd),
+        cards: ((projeto.cards && projeto.cards.commitCard[c.sha12]) || {}).c || [] });
     }
     rows.sort((a, b) => a.data < b.data ? -1 : a.data > b.data ? 1 : 0);
-    const ctx = { projeto, pessoas: pessoas.pessoas, aliasPessoa: pessoas.aliasPessoa, rows, _statusCache: new Map() };
+    // atividades fora do commit: mesmos campos de filtro dos commits (pessoa, repositório, atributos pela data); sem stack
+    const atv = [];
+    for (const a of Object.values(projeto.atividades || {})) {
+      const pessoaId = pessoas.aliasPessoa.get(aliasAtv(a)), ymd = a.data.slice(0, 10), p = pessoas.pessoas.get(pessoaId);
+      atv.push({ key: a.key, tipo: a.tipo, data: a.data, ymd, ym: a.ym, pessoaId, repo: a.repo, origem: a.origem, chaveRepo: a.origem + '|' + a.repo, mr: a.mr, urlMr: a.urlMr,
+        horas: a.horas, base: a.base, pipeline: a.pipeline, stack: '', empresa: atributoEm(p, 'empresa', ymd), tribo: atributoEm(p, 'tribo', ymd), squad: atributoEm(p, 'squad', ymd) });
+    }
+    atv.sort((a, b) => a.data < b.data ? -1 : a.data > b.data ? 1 : 0);
+    // cards do Kanban: pessoa pelo ID cadastral; senão pelo usuário (e-mail) que também assina os commits
+    const cardsProj = (projeto.cards && projeto.cards.registros) || {}, porUsu = new Map();
+    for (const [ak, pid] of pessoas.aliasPessoa) { const u = ak.split('::')[1]; if (u && !porUsu.has(u)) porUsu.set(u, pid); }
+    for (const p of projeto.cadastros.pessoas) for (const a of (p.aliases || [])) { const u = U.norm(a).split('::').pop(); if (u && !porUsu.has(u)) porUsu.set(u, p.id); }
+    const cards = [];
+    for (const k of Object.values(cardsProj)) {
+      const pessoaId = (k.idPessoa && pessoas.pessoas.has(k.idPessoa) && k.idPessoa) || porUsu.get(U.norm(k.usuario)) || 'kanban:' + (U.norm(k.usuario) || k.idPessoa), ymd = k.mes + '-01', p = pessoas.pessoas.get(pessoaId);
+      cards.push({ ...k, pessoaId, ym: k.mes, ymd, repo: '', stack: '', semPessoa: !p,
+        empresa: atributoEm(p, 'empresa', ymd), tribo: atributoEm(p, 'tribo', ymd) || (p && p.cadastrada ? '' : k.tribo), squad: atributoEm(p, 'squad', ymd) || (p && p.cadastrada ? '' : k.squad) });
+    }
+    const ctx = { projeto, pessoas: pessoas.pessoas, aliasPessoa: pessoas.aliasPessoa, rows, atv, cards, temAtv: atv.length > 0, temCards: cards.length > 0, _statusCache: new Map() };
     const geral = statusMeses(ctx, null);
     ctx.status = geral.status; ctx.faltantes = geral.faltantes; ctx.meses = [...geral.status.keys()];
     ctx.statusPara = chaves => { const k = chaves ? [...chaves].sort().join(';') : '*'; if (!ctx._statusCache.has(k)) ctx._statusCache.set(k, chaves ? statusMeses(ctx, chaves) : geral); return ctx._statusCache.get(k); };
@@ -1097,6 +1250,15 @@ const Calc = (() => {
   // ── agregações ───────────────────────────────────────────────────────────
   const somaLiq = rows => rows.reduce((s, r) => s + r.horasLiq, 0);
   const somaBruta = rows => rows.reduce((s, r) => s + r.horas, 0);
+  // ── atividades fora do commit (revisão, integração, reexecução de CI): exibidas ao lado das horas de commits ──
+  const TIPOS_ATV = ['revisao', 'integracao', 'ci'];
+  const ROTULO_ATV = { revisao: 'Revisão', integracao: 'Integração', ci: 'Reexecução de CI' };
+  const ROTULO_ATV_CURTO = { revisao: 'Rev.', integracao: 'Int.', ci: 'CI' };
+  const zeroAtv = () => ({ revisao: 0, integracao: 0, ci: 0, total: 0, eventos: 0 });
+  function somaAtv(atv, filtro) { const s = zeroAtv(); for (const a of atv) { if (filtro && !filtro(a)) continue; s[a.tipo] += a.horas; s.total += a.horas; s.eventos++; } return s; }
+  /* chave → soma por tipo; mesma chave de grupo dos commits (stack não se aplica: atividades não têm stack) */
+  function atvPorGrupo(atv, ag) { const m = new Map(); for (const a of atv) { const k = chaveGrupo(a, ag); let s = m.get(k); if (!s) m.set(k, s = zeroAtv()); s[a.tipo] += a.horas; s.total += a.horas; s.eventos++; } return m; }
+  function atvPorMes(atv) { const m = new Map(); for (const a of atv) { let s = m.get(a.ym); if (!s) m.set(a.ym, s = zeroAtv()); s[a.tipo] += a.horas; s.total += a.horas; s.eventos++; } return m; }
   function chaveGrupo(r, ag) { return ag === 'autor' ? r.pessoaId : ag === 'repo' ? r.repo : ag === 'stack' ? r.stack : (r[ag] || '(sem)'); }
   function porGrupo(rows, ag) {
     const m = new Map();
@@ -1275,7 +1437,7 @@ const Calc = (() => {
       const devsMes = comp.length ? devMes / comp.length : 0, gap = U.ok(meta) && U.ok(atual) ? meta - atual : null;
       const tribos = {}, c = { detrator: 0, neutro: 0, impulsionador: 0 };
       ids.forEach(id => { const t = (attrs.get(id) || {}).tribo; if (t) tribos[t] = (tribos[t] || 0) + 1; const x = cls.pessoas.get(id); if (x && x.categoria) c[x.categoria]++; });
-      return { nome, pessoas: ids.length, devsMes, atual, meta, gap, pctMeta: U.ok(meta) && meta > 0 && U.ok(atual) ? atual / meta : null,
+      return { nome, ids, devMes, pessoas: ids.length, devsMes, atual, meta, gap, pctMeta: U.ok(meta) && meta > 0 && U.ok(atual) ? atual / meta : null,
         horasParaMeta: gap !== null && gap > 0 ? gap * devsMes : 0, tribo: (Object.entries(tribos).sort((a, b) => b[1] - a[1])[0] || [''])[0], ...c };
     }).sort((a, b) => b.horasParaMeta - a.horasParaMeta || (a.pctMeta ?? 9) - (b.pctMeta ?? 9));
   }
@@ -1307,6 +1469,7 @@ const Calc = (() => {
   return { CRIT_PESSOA, ROTULO_CRIT, GRUPO_CRIT, JANELAS, AGRUPAMENTOS, AGRUP_ATRIB, vigente, aliasDe, resolverPessoas, atributoEm, pessoaVigente, statusMeses, contexto,
     filtrar, pessoasUniverso, somaLiq, somaBruta, chaveGrupo, porGrupo, gruposRecorte, serieMensal, mediaMovel, variacaoEquivalente, variacao, estat,
     observacoesPorPessoa, distancia, atributosPessoa, atributosTodos, criteriosAtivos, paresDe, referenciaIndividual, participacao, concentracao,
+    TIPOS_ATV, ROTULO_ATV, ROTULO_ATV_CURTO, zeroAtv, somaAtv, atvPorGrupo, atvPorMes,
     CATEGORIAS, ROTULO_CAT, MIN_TRIBO, classificar, produtividade, reguas, reguasPeriodo, reguaDe, classificacao, contarCategorias, devsDoMes, serieMensalDevs, criarMetas, metasPessoas, planoMeta, ROT_PCT };
 })();
 </script>
@@ -1327,17 +1490,20 @@ const UI = (() => {
      escuro = texto forte (rótulos sobre segmentos claros), fundo = cor do cartão (separa segmentos), rotulo = fundo do rótulo das barras */
   const PALETAS = {
     light: { cor: { primaria: '#296DB7', destaque: '#E68E18', media: '#306F9F', neutra: '#9DB1CF', clara: '#D3DEEC', grade: 'rgba(16,24,40,.06)', texto: '#56667D', escuro: '#0F1B33', fundo: '#FFFFFF', rotulo: 'rgba(255,255,255,.9)', tooltip: '#0F1B33' },
-      cat: { detrator: '#D0584A', neutro: '#B9C6D8', impulsionador: '#2E9E62' } },
+      cat: { detrator: '#D0584A', neutro: '#B9C6D8', impulsionador: '#2E9E62' },
+      // empilhadas sobre os commits (primaria): ordem e tons conferidos no validador de paleta, claro e escuro
+      atv: { revisao: '#1BAF7A', integracao: '#4A3AA7', ci: '#E87BA4' } },
     dark: { cor: { primaria: '#4C8FDB', destaque: '#F0A040', media: '#5B9BE6', neutra: '#5D6B82', clara: '#34425A', grade: 'rgba(255,255,255,.07)', texto: '#A2AFC2', escuro: '#F3F6FB', fundo: '#151D2A', rotulo: 'rgba(21,29,42,.9)', tooltip: '#2C394D' },
-      cat: { detrator: '#E0685A', neutro: '#5D6B82', impulsionador: '#3DB277' } },
+      cat: { detrator: '#E0685A', neutro: '#5D6B82', impulsionador: '#3DB277' },
+      atv: { revisao: '#199E70', integracao: '#9085E9', ci: '#D55181' } },
   };
-  const COR = {}, COR_CAT = {};
+  const COR = {}, COR_CAT = {}, COR_ATV = {};
   const CHAVE_TEMA = 'gradus-analise-tema';
   let tema = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
   function aplicarTema(t) {
     tema = t === 'dark' ? 'dark' : 'light';
     if (tema === 'dark') document.documentElement.dataset.theme = 'dark'; else delete document.documentElement.dataset.theme;
-    Object.assign(COR, PALETAS[tema].cor); Object.assign(COR_CAT, PALETAS[tema].cat);
+    Object.assign(COR, PALETAS[tema].cor); Object.assign(COR_CAT, PALETAS[tema].cat); Object.assign(COR_ATV, PALETAS[tema].atv);
     if (window.Chart) Chart.defaults.color = COR.texto;
     const b = U.el('btn-tema'); if (b) { b.setAttribute('aria-checked', String(tema === 'dark')); b.title = tema === 'dark' ? 'Tema claro' : 'Tema escuro'; }
   }
@@ -1345,7 +1511,7 @@ const UI = (() => {
   const esc = U.esc;
   const AGRUP = Calc.AGRUPAMENTOS;
   const AGRUP_PL = { autor: 'autores', squad: 'squads', tribo: 'tribos', empresa: 'empresas', repo: 'repositórios', stack: 'stacks' };
-  const PAGINAS = { geral: ['Painel', 'Detratores e impulsionadores', 'Tabela'], detalhe: ['Resumo', 'Composição', 'Commits'], ia: ['Plano da meta', 'Gaps (IA)', 'Conversa'] };
+  const PAGINAS = { geral: ['Painel', 'Detratores e impulsionadores', 'Tabela'], detalhe: ['Resumo', 'Composição', 'Commits e Cards'], ia: ['Plano da meta', 'Gaps (IA)', 'Conversa'] };
   const ROW_TBL = 38, ROW_GRID = 34; // iguais às alturas de linha em styles.css (.tbl td, .grid-edit td)
 
   // ── infraestrutura ───────────────────────────────────────────────────────
@@ -1361,7 +1527,7 @@ const UI = (() => {
     document.body.addEventListener('dragover', e => { const z = e.target.closest('.input-panel[data-drop]'); if (z) { e.preventDefault(); z.classList.add('drag'); } });
     document.body.addEventListener('dragleave', e => { const z = e.target.closest('.input-panel[data-drop]'); if (z) z.classList.remove('drag'); });
     document.body.addEventListener('drop', e => { const z = e.target.closest('.input-panel[data-drop]'); if (!z) return; e.preventDefault(); z.classList.remove('drag');
-      const fs = [...e.dataTransfer.files]; if (!fs.length) return; if (z.dataset.drop === 'motor') App.importarArquivos(fs); else if (z.dataset.drop === 'cadastro') App.importarCadastro(fs[0]); else if (z.dataset.drop === 'backup') App.importarBackup(fs[0]); });
+      const fs = [...e.dataTransfer.files]; if (!fs.length) return; if (z.dataset.drop === 'motor') App.importarArquivos(fs); else if (z.dataset.drop === 'cards') App.importarCards(fs); else if (z.dataset.drop === 'cadastro') App.importarCadastro(fs[0]); else if (z.dataset.drop === 'backup') App.importarBackup(fs[0]); });
     document.addEventListener('keydown', e => { if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return; if (e.key === 'ArrowRight') App.irPagina(App.abaAtiva, (App.pagina[App.abaAtiva] || 1) + 1); if (e.key === 'ArrowLeft') App.irPagina(App.abaAtiva, (App.pagina[App.abaAtiva] || 1) - 1); });
     let t; window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { if (App.pronto) renderTudo(); }, 150); });
     // clique fora de um filtro de seleção múltipla fecha o painel
@@ -1423,15 +1589,34 @@ const UI = (() => {
         ctx.restore(); }); });
   } };
 
-  /* plugin: rótulo acima de cada barra simples: "valor h (variação % vs. barra anterior)" */
+  /* plugin: rótulo acima de cada barra: "valor h (variação % vs. barra anterior)"; em barras empilhadas (datasets com
+     _pilha), o valor é o total da pilha e o rótulo fica sobre o segmento mais alto */
   const rotulosBarra = { id: 'rotulosBarra', afterDatasetsDraw(c) {
-    const { ctx } = c, ds = c.data.datasets[0], meta = c.getDatasetMeta(0); if (!ds || meta.hidden) return;
-    meta.data.forEach((el, i) => { const v = ds.data[i]; if (v === null || v === undefined) return; const ant = i > 0 ? ds.data[i - 1] : null;
-      const pct = U.ok(ant) && ant > 0 ? v / ant - 1 : null, texto = `${U.fmtNum(v, 1)} h${pct !== null ? ` (${U.fmtPct(pct, 0, true)})` : ''}`;
+    const { ctx } = c, idx = c.data.datasets.map((d, i) => i).filter(i => c.data.datasets[i]._pilha && !c.getDatasetMeta(i).hidden);
+    const dsIdx = idx.length ? idx : (c.data.datasets[0] && !c.getDatasetMeta(0).hidden ? [0] : []); if (!dsIdx.length) return;
+    const n = c.data.labels.length, tot = [];
+    for (let i = 0; i < n; i++) { const vs = dsIdx.map(d => c.data.datasets[d].data[i]); tot.push(vs.every(v => v === null || v === undefined) ? null : vs.reduce((a, v) => a + (v || 0), 0)); }
+    for (let i = 0; i < n; i++) { const v = tot[i]; if (v === null) continue; const ant = i > 0 ? tot[i - 1] : null;
+      const els = dsIdx.map(d => c.getDatasetMeta(d).data[i]).filter(Boolean); if (!els.length) continue;
+      const x = els[0].x, y = Math.min(...els.map(e => e.y));
+      const pct = U.ok(ant) && ant > 0 ? v / ant - 1 : null, espaco = c.chartArea.width / n - 4;
       ctx.save(); ctx.font = '600 12px Segoe UI, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-      const w = ctx.measureText(texto).width + 8; ctx.fillStyle = COR.rotulo; ctx.fillRect(el.x - w / 2, el.y - 20, w, 16);
-      ctx.fillStyle = COR.escuro; ctx.fillText(texto, el.x, el.y - 5); ctx.restore(); });
+      let texto = `${U.fmtNum(v, 1)} h${pct !== null ? ` (${U.fmtPct(pct, 0, true)})` : ''}`; if (ctx.measureText(texto).width > espaco) texto = `${U.fmtNum(v, 1)} h`;
+      const w = ctx.measureText(texto).width + 8; ctx.fillStyle = COR.rotulo; ctx.fillRect(x - w / 2, y - 20, w, 16);
+      ctx.fillStyle = COR.escuro; ctx.fillText(texto, x, y - 5); ctx.restore(); }
   } };
+  /* barras de horas: commits (+ revisão, integração e reexecução de CI empilhadas, quando o projeto tem atividades).
+     valores = [{ commits, revisao, integracao, ci }] por rótulo; corCommits = cor (ou lista) dos commits */
+  function datasetsHoras(valores, corCommits, comAtv, extra = {}) {
+    const base = { borderSkipped: 'bottom', barPercentage: 0.66, categoryPercentage: 0.8, order: 1, ...extra };
+    if (!comAtv) return [{ label: extra.label || 'Horas', data: valores.map(v => v.commits), backgroundColor: corCommits, borderRadius: 3, ...base }];
+    const seg = { borderWidth: 1, borderColor: COR.fundo, stack: 'h', _pilha: true };
+    return [{ label: 'Commits', data: valores.map(v => v.commits), backgroundColor: corCommits, ...base, ...seg },
+      ...Calc.TIPOS_ATV.map(t => ({ label: Calc.ROTULO_ATV[t], data: valores.map(v => v.commits === null && !v[t] ? null : U.round(v[t] || 0, 2)), backgroundColor: COR_ATV[t], ...base, ...seg }))];
+  }
+  const legAtv = () => Calc.TIPOS_ATV.map(t => `<div class="ld"><div class="ldot" style="background:${COR_ATV[t]}"></div>${esc(Calc.ROTULO_ATV[t].toLowerCase())}</div>`).join('');
+  /* texto curto das atividades fora do commit de um conjunto: "rev. 12,3 h · int. 4,0 h · CI 0,3 h" */
+  const txtAtv = (s, div = 1, un = ' h') => Calc.TIPOS_ATV.map(t => `${Calc.ROTULO_ATV_CURTO[t].toLowerCase().replace('ci', 'CI')} ${U.fmtNum((s[t] || 0) / div, 1)}${un}`).join(' · ');
 
   // ── recorte corrente ─────────────────────────────────────────────────────
   function recorte() {
@@ -1453,7 +1638,9 @@ const UI = (() => {
     const serie = Calc.serieMensalDevs(ctx, rows, new Set(pessoasIds), meses, status, lim);
     const comp = serie.filter(x => status.get(x.ym) === 'completo'), devMes = comp.reduce((a, x) => a + x.devs, 0), comMeta = comp.reduce((a, x) => a + (U.ok(x.meta) ? x.devs : 0), 0);
     const metaPeriodo = comMeta ? comp.reduce((a, x) => a + (U.ok(x.meta) ? x.meta * x.devs : 0), 0) / comMeta : null;
-    return { ctx, p, an, f, rows, rowsSP, rowsUniv, rowsUnivSP, meses, status, faltantes, universo, pessoasIds, foco, criterios, obs, attrs, total: Calc.somaLiq(rows),
+    // atividades fora do commit: mesmos filtros; não entram na produtividade, na meta nem na classificação
+    const atvUniv = ctx.temAtv ? Calc.filtrar(ctx, ctx.atv, f, { ignorarPessoa: true }) : [], atv = foco ? atvUniv.filter(a => foco.has(a.pessoaId)) : atvUniv;
+    return { ctx, p, an, f, rows, rowsSP, rowsUniv, rowsUnivSP, atv, atvUniv, temAtv: ctx.temAtv, atvTot: Calc.somaAtv(atv), meses, status, faltantes, universo, pessoasIds, foco, criterios, obs, attrs, total: Calc.somaLiq(rows),
       janela: an.janelaVariacao || 'mes', colorir: an.modo === 'segmentada' && criterios.length > 0, lim, cls, prod, serie, metaPeriodo,
       hDevPeriodo: devMes ? comp.reduce((a, x) => a + x.liq, 0) / devMes : null, mesesCompletos: prod.mesesCompletos };
   }
@@ -1556,6 +1743,10 @@ const UI = (() => {
       <div class="drop-acts"><button class="btn-link" data-click="filtroMultiLimpar" data-k="${k}">limpar</button></div></div></div></div>`;
   }
 
+  /* seletor de mês do período (De / Até), o mesmo na visão geral e no detalhamento */
+  function htmlMes(R, id, k) {
+    return `<div class="fl"><label for="${id}">${k === 'mesIni' ? 'De' : 'Até'}</label><select id="${id}" data-act="mes" data-k="${k}">${R.ctx.meses.map(y => opt(y, R.f[k], U.fmtMes(y) + (R.status.get(y) === 'parcial' ? ' (parcial)' : R.status.get(y) === 'sem-dados' || !R.status.has(y) ? ' (sem dados)' : ''))).join('')}</select></div>`;
+  }
   function htmlControles(R) {
     const { ctx, an, f, p } = R, cs = configs();
     const pessoas = [...ctx.pessoas.values()].filter(x => x.aliases.size || x.cadastrada).map(x => ({ id: x.id, nome: x.nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
@@ -1563,7 +1754,7 @@ const UI = (() => {
     const vals = k => [...new Set([...ctx.pessoas.values()].flatMap(x => x.versoes.map(v => v[k])).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
     const sel = (id, label, opts, val, k) => `<div class="fl"><label for="${id}">${label}</label><select id="${id}" data-act="filtro" data-k="${k}"><option value="">Todos</option>${opts.map(o => opt(o.v, val, o.r)).join('')}</select></div>`;
     const selAttr = (k, rot) => ctx.camposPessoa[k] ? sel('f-' + k, rot || Calc.ROTULO_CRIT[k], vals(k).map(v => ({ v })), f[k][0] || '', k) : '';
-    const mes = (id, k) => `<div class="fl"><label for="${id}">${k === 'mesIni' ? 'De' : 'Até'}</label><select id="${id}" data-act="mes" data-k="${k}">${ctx.meses.map(y => opt(y, f[k], U.fmtMes(y) + (R.status.get(y) === 'parcial' ? ' (parcial)' : R.status.get(y) === 'sem-dados' || !R.status.has(y) ? ' (sem dados)' : ''))).join('')}</select></div>`;
+    const mes = (id, k) => htmlMes(R, id, k);
     const crit = Object.keys(Modelo.CRITERIOS_PADRAO), disp = k => k === 'stack' ? true : ctx.camposPessoa[k];
     const grupos = {}; crit.forEach(k => (grupos[Calc.GRUPO_CRIT[k]] = grupos[Calc.GRUPO_CRIT[k]] || []).push(k));
     const nMais = ['repos', 'stacks', 'senioridade', 'natureza'].filter(k => f[k].length).length;
@@ -1611,7 +1802,7 @@ const UI = (() => {
     const k1 = `<div class="kpi b"><div class="kpi-label"><span>Entrega estimada</span><span>${esc(periodo)}</span></div>
         <div class="kpi-duo"><div><div class="kpi-cap">Total no período</div><div class="kpi-value" id="kpi-entrega">${U.fmtH(R.total)}</div></div>
         <div><div class="kpi-cap">Por mês e desenvolvedor</div><div class="kpi-value" id="kpi-entrega-dev" title="${esc(comp.length ? `horas de ${perMeses(comp.map(x => x.ym))} ÷ ${U.fmtInt(devMes)} desenvolvedores-mês` : 'sem mês completo no período')}">${fmtHD(hDev)}</div></div></div>
-        <div class="kpi-sub">horas estimadas líquidas no código entregue <span class="m">· por dev: meses completos, como no gráfico</span> ${notaMes}</div></div>`;
+        <div class="kpi-sub">horas estimadas líquidas no código entregue <span class="m">· por dev: meses completos, como no gráfico</span> ${notaMes}${R.temAtv ? `<br><span id="kpi-atv" title="atividades fora do commit no período: não entram na produtividade nem na meta">+ <b>${U.fmtH(R.atvTot.total)}</b> fora do commit <span class="m">(${esc(txtAtv(R.atvTot))})</span></span>` : ''}</div></div>`;
     const v = Calc.variacao(serieValorDev(R, R.rowsSP, new Set(R.pessoasIds)), R.f.mesIni, R.f.mesFim, status, R.janela);
     const k2 = kpiVar(v, R.janela, true, 'dev');
     let k3;
@@ -1662,7 +1853,7 @@ const UI = (() => {
   } });
   /* evolução: barras (horas por desenvolvedor, ou contagem por categoria) + linha da meta no mesmo eixo;
      desenvolvedores do mês (e a meta) numa tabela abaixo do eixo */
-  function renderEvolucao(R, ids = { barras: 'ch-evolucao', sub: 'ch-evolucao-sub', leg: 'ch-evolucao-leg' }, dados = null) {
+  function renderEvolucao(R, ids = { barras: 'ch-evolucao', sub: 'ch-evolucao-sub', leg: 'ch-evolucao-leg' }, dados = null, atvRows = null) {
     const { meses, an, status } = R, sub = U.el(ids.sub), leg = U.el(ids.leg);
     const rotulos = meses.map(y => U.fmtMes(y) + (status.get(y) === 'parcial' ? '*' : ''));
     const parciais = meses.filter(y => status.get(y) === 'parcial');
@@ -1676,10 +1867,17 @@ const UI = (() => {
     const legTab = '<div class="ld mini">· abaixo do eixo: quantidade de desenvolvedores no mês</div>';
     if (modo === 'horas') {
       sub.textContent = `horas estimadas líquidas por desenvolvedor no mês (horas do mês ÷ desenvolvedores do mês) · meta = média da meta de cada dev do mês (${descMeta(R)})` + notaParcial;
-      leg.innerHTML = `<div class="ld"><div class="ldot" style="background:${COR.primaria}"></div>horas líquidas por desenvolvedor</div><div class="ld"><div class="ldot line" style="background:${COR.destaque}"></div>meta de produtividade</div>` + legTab;
-      const linhaMeta = { type: 'line', label: 'Meta', data: s.map(x => U.ok(x.meta) ? U.round(x.meta, 2) : null), borderColor: COR.destaque, backgroundColor: COR.destaque, borderWidth: 2, borderDash: [6, 4], pointRadius: 3, pointHoverRadius: 5, tension: 0, order: 0 };
-      chart(ids.barras, { type: 'bar', plugins: [rotulosBarra, tabelaEixo(tabela)], data: { labels: rotulos, datasets: [{ label: 'Horas por desenvolvedor', data: s.map(x => x.horasPorDev === null ? null : U.round(x.horasPorDev, 2)), backgroundColor: meses.map(y => status.get(y) === 'completo' ? COR.primaria : COR.clara), borderRadius: 3, borderSkipped: 'bottom', barPercentage: 0.66, categoryPercentage: 0.8, order: 1 }, linhaMeta] },
-        options: opts(v => U.fmtNum(v, 0), c => c.dataset.label === 'Meta' ? `Meta: ${U.fmtNum(c.raw, 1)} h/mês·dev` : `${U.fmtH(c.raw)} por desenvolvedor · ${U.fmtH(s[c.dataIndex].liq)} no total · ${U.fmtInt(s[c.dataIndex].devs)} devs`, { scales: escalas(), layout }) });
+      const comAtv = R.temAtv, am = comAtv ? Calc.atvPorMes(atvRows || R.atv) : null;
+      if (comAtv) sub.textContent += ' · barras empilhadas: horas de commits + atividades fora do commit (revisão, integração, reexecução de CI) ÷ os mesmos desenvolvedores; rótulo = total; a meta compara só as horas de commits';
+      leg.innerHTML = `<div class="ld"><div class="ldot" style="background:${COR.primaria}"></div>${comAtv ? 'commits (horas líquidas)' : 'horas líquidas por desenvolvedor'}</div>${comAtv ? legAtv() : ''}<div class="ld"><div class="ldot line" style="background:${COR.destaque}"></div>meta de produtividade</div>` + legTab;
+      const linhaMeta = { type: 'line', label: 'Meta', stack: 'meta', data: s.map(x => U.ok(x.meta) ? U.round(x.meta, 2) : null), borderColor: COR.destaque, backgroundColor: COR.destaque, borderWidth: 2, borderDash: [6, 4], pointRadius: 3, pointHoverRadius: 5, tension: 0, order: 0 };
+      const vals = s.map(x => { const v = { commits: x.horasPorDev === null ? null : U.round(x.horasPorDev, 2) }, a = am && am.get(x.ym); Calc.TIPOS_ATV.forEach(t => v[t] = a && x.devs ? a[t] / x.devs : 0); return v; });
+      const barras = datasetsHoras(vals, meses.map(y => status.get(y) === 'completo' ? COR.primaria : COR.clara), comAtv, { label: 'Horas por desenvolvedor' });
+      const esc2 = escalas(); if (comAtv) { esc2.x.stacked = true; esc2.y.stacked = true; }
+      chart(ids.barras, { type: 'bar', plugins: [rotulosBarra, tabelaEixo(tabela)], data: { labels: rotulos, datasets: [...barras, linhaMeta] },
+        options: opts(v => U.fmtNum(v, 0), c => c.dataset.label === 'Meta' ? `Meta: ${U.fmtNum(c.raw, 1)} h/mês·dev`
+          : comAtv ? (c.dataset.label === 'Commits' ? `Commits: ${U.fmtH(c.raw)} por dev · ${U.fmtH(s[c.dataIndex].liq)} no total · ${U.fmtInt(s[c.dataIndex].devs)} devs` : `${c.dataset.label}: ${U.fmtH(c.raw)} por dev`)
+          : `${U.fmtH(c.raw)} por desenvolvedor · ${U.fmtH(s[c.dataIndex].liq)} no total · ${U.fmtInt(s[c.dataIndex].devs)} devs`, { scales: esc2, layout }) });
     } else {
       sub.textContent = `desenvolvedores por categoria em cada mês: horas da pessoa no mês ÷ meta da tribo dela no mês (${descMeta(R)}) · ${descLim(R)} · meses parciais ficam sem meta · rótulo = desenvolvedores (% do mês)` + notaParcial;
       leg.innerHTML = Calc.CATEGORIAS.map(c => `<div class="ld"><div class="ldot" style="background:${COR_CAT[c]}"></div>${Calc.ROTULO_CAT[c].toLowerCase()}</div>`).join('') + (s.some(x => x.semRegua) ? `<div class="ld"><div class="ldot" style="background:${COR.clara}"></div>sem meta</div>` : '') + legTab;
@@ -1716,15 +1914,18 @@ const UI = (() => {
     U.el('ch-cat-sub').textContent = R.mesesCompletos
       ? `barras por ${rotNivel.toLowerCase()}${nivel && DICA_NIVEL[nivel] ? ` (${DICA_NIVEL[nivel]})` : ''} · meta de cada pessoa = meta da tribo dela (${descMeta(R)}), média dos meses completos de ${perMeses(R.meses)}; tribo com menos de ${Calc.MIN_TRIBO} pessoas usa ${artQ(R)} da base inteira · pessoa = produtividade em ${perMeses(R.meses)} · ${descLim(R)}${!R.ctx.camposPessoa.tribo ? ` · sem tribo nos dados cadastrais: todos ${pelaQ(R)} da base inteira` : ''}`
       : `sem classificação: o período ${perMeses(R.meses)} não tem mês completo.`;
-    const grupos = new Map(); const novo = () => ({ n: 0, detrator: 0, neutro: 0, impulsionador: 0, semRegua: 0, reguas: [], universo: false, sem: false, somaProd: 0 });
+    const grupos = new Map(); const novo = () => ({ n: 0, detrator: 0, neutro: 0, impulsionador: 0, semRegua: 0, reguas: [], universo: false, sem: false, somaProd: 0, atv: Calc.zeroAtv() });
     const todas = novo();
     const semRot = nivel ? `Sem ${rotNivel.toLowerCase()}` : 'Todos os desenvolvedores';
+    // atividades fora do commit por pessoa nos meses completos (mesma base da produtividade: ÷ meses completos)
+    const atvP = R.temAtv ? Calc.atvPorGrupo(R.atvUniv.filter(a => R.status.get(a.ym) === 'completo'), 'autor') : null;
     cls.forEach(([id, x]) => {
       const v = nivel ? ((R.attrs.get(id) || {})[nivel] || '') : '', t = v || semRot;
       if (!grupos.has(t)) grupos.set(t, { ...novo(), sem: !v });
       const g = grupos.get(t), c = x.categoria || 'semRegua';
       g.n++; todas.n++; g[c]++; todas[c]++; if (U.ok(x.regua)) g.reguas.push(x.regua); if (x.base === 'universo') g.universo = true;
       g.somaProd += x.valor || 0; todas.somaProd += x.valor || 0;
+      const a = atvP && atvP.get(id); if (a) Calc.TIPOS_ATV.forEach(k => { g.atv[k] += a[k]; todas.atv[k] += a[k]; });
     });
     const linhas = [...grupos.entries()].sort((a, b) => (a[1].sem - b[1].sem) || (b[1].n - a[1].n) || a[0].localeCompare(b[0], 'pt-BR'));
     const labels = linhas.map(([t]) => t), reg = linhas.map(([, g]) => g), totais = reg.map(g => g.n);
@@ -1740,11 +1941,13 @@ const UI = (() => {
     const cel = (g, c) => `<td class="num">${U.fmtInt(g[c])} ${pct(g[c], g.n)}</td>`;
     const box = U.el('cat-tribos');
     const mediaTxt = g => g.n && R.mesesCompletos ? U.fmtNum(g.somaProd / g.n, 1) : '—';
-    box.innerHTML = `<div class="tbl-wrap fill" id="cat-wrap"><table class="tbl compacta" data-nivel="${nivel || ''}"><thead><tr><th>${esc(rotNivel)}</th><th class="num" title="H/mês por dev (média): horas líquidas por mês das pessoas do grupo em ${esc(perMeses(R.meses))} (horas ÷ meses completos ÷ pessoas)">H/mês·dev</th><th class="num" title="Meta (h/mês): percentil da tribo de cada pessoa, média dos meses completos; faixa quando o grupo reúne metas diferentes">Meta</th><th class="num">Pessoas</th><th class="num"><span class="cat detrator">Detr.</span></th><th class="num"><span class="cat neutro">Neutros</span></th><th class="num"><span class="cat impulsionador">Impuls.</span></th></tr></thead><tbody></tbody>
-      <tfoot><tr><td>Total</td><td class="num">${mediaTxt(todas)}</td><td class="num">${reguaTxt({ reguas: cls.map(([, x]) => x.regua).filter(U.ok) })}</td><td class="num">${U.fmtInt(todas.n)}</td>${cel(todas, 'detrator')}${cel(todas, 'neutro')}${cel(todas, 'impulsionador')}</tr></tfoot></table></div><div class="pag-slot" id="cat-pag"></div>
+    const atvTd = g => !atvP ? '' : Calc.TIPOS_ATV.map(k => `<td class="num">${g.n && R.mesesCompletos ? U.fmtNum(g.atv[k] / R.mesesCompletos / g.n, 1) : '—'}</td>`).join('');
+    const atvTh = !atvP ? '' : Calc.TIPOS_ATV.map(k => `<th class="num" title="${esc(`${Calc.ROTULO_ATV[k]} (fora do commit), h/mês por dev: horas dos meses completos ÷ meses completos ÷ pessoas; não entra na classificação`)}">${esc(Calc.ROTULO_ATV_CURTO[k])}</th>`).join('');
+    box.innerHTML = `<div class="tbl-wrap fill" id="cat-wrap"><table class="tbl compacta" data-nivel="${nivel || ''}"><thead><tr><th>${esc(rotNivel)}</th><th class="num" title="H/mês por dev (média): horas líquidas por mês das pessoas do grupo em ${esc(perMeses(R.meses))} (horas ÷ meses completos ÷ pessoas)">H/mês·dev</th>${atvTh}<th class="num" title="Meta (h/mês): percentil da tribo de cada pessoa, média dos meses completos; faixa quando o grupo reúne metas diferentes">Meta</th><th class="num">Pessoas</th><th class="num"><span class="cat detrator">Detr.</span></th><th class="num"><span class="cat neutro">Neutros</span></th><th class="num"><span class="cat impulsionador">Impuls.</span></th></tr></thead><tbody></tbody>
+      <tfoot><tr><td>Total</td><td class="num">${mediaTxt(todas)}</td>${atvTd(todas)}<td class="num">${reguaTxt({ reguas: cls.map(([, x]) => x.regua).filter(U.ok) })}</td><td class="num">${U.fmtInt(todas.n)}</td>${cel(todas, 'detrator')}${cel(todas, 'neutro')}${cel(todas, 'impulsionador')}</tr></tfoot></table></div><div class="pag-slot" id="cat-pag"></div>
       <div class="mini">Produtividade = horas líquidas ÷ meses completos. Pessoas do cadastro sem commits entram com zero. Meta marcada com * inclui pessoas avaliadas ${pelaQ(R)} da base inteira (sem tribo ou tribo com menos de ${Calc.MIN_TRIBO} pessoas). Indício para investigação, não avaliação de desempenho.</div>`;
     const por = linhasQueCabem('cat-wrap', ROW_TBL), pg = paginar('cat-' + (nivel || 'todos'), linhas.length, por);
-    box.querySelector('tbody').innerHTML = linhas.slice(pg.ini, pg.fim).map(([t, g]) => `<tr><td>${esc(t)}</td><td class="num">${mediaTxt(g)}</td><td class="num">${reguaTxt(g)}${g.universo ? ' *' : ''}</td><td class="num">${U.fmtInt(g.n)}</td>${cel(g, 'detrator')}${cel(g, 'neutro')}${cel(g, 'impulsionador')}</tr>`).join('');
+    box.querySelector('tbody').innerHTML = linhas.slice(pg.ini, pg.fim).map(([t, g]) => `<tr><td>${esc(t)}</td><td class="num">${mediaTxt(g)}</td>${atvTd(g)}<td class="num">${reguaTxt(g)}${g.universo ? ' *' : ''}</td><td class="num">${U.fmtInt(g.n)}</td>${cel(g, 'detrator')}${cel(g, 'neutro')}${cel(g, 'impulsionador')}</tr>`).join('');
     U.el('cat-pag').innerHTML = pg.html;
     App.classificacaoAtual = { nivel, linhas, todas, cls };
   }
@@ -1753,6 +1956,7 @@ const UI = (() => {
   function linhasTabela(R) {
     const { ctx, rows, obs, attrs, criterios, p, an, status } = R, ag = Calc.AGRUP_ATRIB.includes(an.agrupamento) && !ctx.camposPessoa[an.agrupamento] ? 'autor' : an.agrupamento;
     const grupos = Calc.gruposRecorte(ctx, rows, ag, new Set(R.pessoasIds)), gruposSP = Calc.porGrupo(R.rowsSP, ag), total = R.total, out = [];
+    const atvG = R.temAtv && ag !== 'stack' ? Calc.atvPorGrupo(R.atv, ag) : null;
     for (const [k, g] of grupos) {
       const gsp = gruposSP.get(k) || { rows: [] };
       const v = Calc.variacao(serieValor(gsp.rows), R.f.mesIni, R.f.mesFim, status, R.janela);
@@ -1763,7 +1967,8 @@ const UI = (() => {
         if (dist === null && !distMotivo) distMotivo = 'Mediana zero';
       } else distMotivo = 'Referência definida para pessoas; horas totais de grupos de tamanhos diferentes não são comparadas como desempenho';
       const mc = R.mesesCompletos;
-      out.push({ chave: k, nome: nomeGrupo(R, ag, k), liq: g.liq, porMes: mc ? g.liq / mc : null, bruta: g.bruta, commits: g.commits, pessoas: g.pessoas.size, semCommits: !!g.semCommits, variacao: v, dist, distMotivo, share: total > 0 ? g.liq / total : null, ref });
+      out.push({ chave: k, nome: nomeGrupo(R, ag, k), liq: g.liq, porMes: mc ? g.liq / mc : null, bruta: g.bruta, commits: g.commits, pessoas: g.pessoas.size, semCommits: !!g.semCommits, variacao: v, dist, distMotivo, share: total > 0 ? g.liq / total : null, ref,
+        atv: atvG ? (atvG.get(k) || Calc.zeroAtv()) : null });
     }
     out.sort((a, b) => b.liq - a.liq);
     return { ag, linhas: out };
@@ -1772,9 +1977,12 @@ const UI = (() => {
   function renderTabela(R) {
     const { ctx } = R, { ag, linhas } = linhasTabela(R), body = U.el('tbl-body'), mc = R.mesesCompletos;
     U.el('tbl-titulo').textContent = `Resumo por ${AGRUP[ag].toLowerCase()}`;
-    U.el('tbl-sub').textContent = `${U.fmtInt(linhas.length)} ${AGRUP_PL[ag]} · horas/mês = horas líquidas ÷ ${U.fmtInt(mc)} mês(es) completo(s) do período · clique numa linha para o detalhamento · referência: ${nomeRef(R)}`;
+    U.el('tbl-sub').textContent = `${U.fmtInt(linhas.length)} ${AGRUP_PL[ag]} · horas/mês = horas líquidas ÷ ${U.fmtInt(mc)} mês(es) completo(s) do período · clique numa linha para o detalhamento · referência: ${nomeRef(R)}${R.temAtv ? ' · Revisão, Integração e Reexecução de CI: atividades fora do commit, fora da classificação' : ''}`;
     App.tabelaAtual = { ag, linhas };
-    const th = `<tr><th>${AGRUP[ag]}</th><th class="num" title="horas líquidas ÷ meses completos do período selecionado">Horas/mês (${esc(perMeses(R.meses))})</th><th class="num" title="${esc(Calc.JANELAS[R.janela])}">Evolução</th><th class="num" title="${esc(nomeRef(R))}">Distância da referência</th>${ag === 'autor' ? '<th title="Produtividade da pessoa ÷ régua da tribo">Classificação</th>' : ''}</tr>`;
+    const comAtv = R.temAtv, semStack = ag === 'stack';
+    const thAtv = comAtv ? Calc.TIPOS_ATV.map(t => `<th class="num" title="${esc(`${Calc.ROTULO_ATV[t]} (fora do commit): horas ÷ meses completos do período${semStack ? ' · atividades não têm stack' : ''}`)}">${esc(Calc.ROTULO_ATV[t])}/mês</th>`).join('') : '';
+    const tdAtv = l => !comAtv ? '' : Calc.TIPOS_ATV.map(t => `<td class="num">${!l.atv ? nc('—', 'atividades fora do commit não têm stack') : mc ? U.fmtNum(l.atv[t] / mc, 1) : nc()}</td>`).join('');
+    const th = `<tr><th>${AGRUP[ag]}</th><th class="num" title="horas líquidas ÷ meses completos do período selecionado">${comAtv ? 'Commits' : 'Horas'}/mês (${esc(perMeses(R.meses))})</th>${thAtv}<th class="num" title="${esc(Calc.JANELAS[R.janela])}">Evolução</th><th class="num" title="${esc(nomeRef(R))}">Distância da referência</th>${ag === 'autor' ? '<th title="Produtividade da pessoa ÷ régua da tribo">Classificação</th>' : ''}</tr>`;
     const tr = l => {
       const pills = [];
       if (ag === 'autor' && ctx.temCadastro && !(ctx.pessoas.get(l.chave) || {}).cadastrada) pills.push('<span class="pill pg" title="Autor sem correspondência nos dados cadastrais">sem cadastro</span>');
@@ -1782,14 +1990,16 @@ const UI = (() => {
       const sub = ag !== 'autor' ? ` <span class="sub">· ${U.fmtInt(l.pessoas)} pessoa(s)</span>` : '';
       const c = ag === 'autor' ? R.cls.pessoas.get(l.chave) : null;
       return `<tr class="click" data-click="detalhe" data-tipo="${ag}" data-k="${esc(l.chave)}"><td>${esc(l.nome)} ${pills.join(' ')}${sub}</td>
-      <td class="num" title="${esc(`${U.fmtH(l.liq)} líquidas no período · ${U.fmtInt(l.commits)} commits`)}">${l.porMes === null ? nc('—', 'sem mês completo no período') : `${U.fmtNum(l.porMes, 1)} h/mês`}</td>
+      <td class="num" title="${esc(`${U.fmtH(l.liq)} líquidas no período · ${U.fmtInt(l.commits)} commits`)}">${l.porMes === null ? nc('—', 'sem mês completo no período') : `${U.fmtNum(l.porMes, 1)} h/mês`}</td>${tdAtv(l)}
       <td class="num" title="${esc(l.variacao.motivo || `${perMeses(l.variacao.mesesAtual)} vs ${perMeses(l.variacao.mesesAnt)}`)}">${fmtDelta(l.variacao.variacao, true)}</td>
       <td class="num" title="${esc(l.distMotivo || (l.ref ? `${nomeRef(R)} · mediana ${U.fmtH(l.ref.mediana)} · n = ${l.ref.n}` : ''))}">${l.dist === null ? nc(l.distMotivo && /Sem referência/.test(l.distMotivo) ? 'Sem referência' : '—', l.distMotivo) : fmtDelta(l.dist, R.colorir)}</td>
       ${ag === 'autor' ? `<td title="${esc(c && c.razao !== null ? `${fmtProd(c.valor)} = ${U.fmtPct(c.razao, 0)} da régua ${c.base === 'tribo' ? 'da tribo ' + c.tribo : 'do universo'} (${fmtProd(c.regua)}, ${descMeta(R)})` : 'sem régua')}">${catHtml(c ? c.categoria : null)}</td>` : ''}</tr>`;
     };
-    const tot = linhas.reduce((s, l) => s + l.liq, 0);
+    const tot = linhas.reduce((s, l) => s + l.liq, 0), totAtv = Calc.zeroAtv();
+    linhas.forEach(l => { if (l.atv) Calc.TIPOS_ATV.forEach(t => totAtv[t] += l.atv[t]); });
+    const tfAtv = !comAtv ? '' : Calc.TIPOS_ATV.map(t => `<td class="num">${semStack ? nc() : mc ? U.fmtNum(totAtv[t] / mc, 1) : nc()}</td>`).join('');
     body.innerHTML = `<div class="tbl-wrap fill" id="tbl-wrap"><table class="tbl" id="tbl-grupos" data-total="${linhas.length}"><thead>${th}</thead><tbody></tbody>
-      <tfoot><tr><td>Total do recorte · ${U.fmtInt(R.rows.length)} commits · ${U.fmtInt(linhas.length)} ${AGRUP_PL[ag]} · ${U.fmtH(tot)} líquidas</td><td class="num">${mc ? `${U.fmtNum(tot / mc, 1)} h/mês` : nc()}</td><td></td><td></td>${ag === 'autor' ? '<td></td>' : ''}</tr></tfoot></table></div><div class="pag-slot" id="tbl-pag"></div>
+      <tfoot><tr><td>Total do recorte · ${U.fmtInt(R.rows.length)} commits · ${U.fmtInt(linhas.length)} ${AGRUP_PL[ag]} · ${U.fmtH(tot)} líquidas</td><td class="num">${mc ? `${U.fmtNum(tot / mc, 1)} h/mês` : nc()}</td>${tfAtv}<td></td><td></td>${ag === 'autor' ? '<td></td>' : ''}</tr></tfoot></table></div><div class="pag-slot" id="tbl-pag"></div>
       <div class="mini">${ag === 'autor' ? (R.colorir ? 'Distância colorida: pares definidos por critérios explícitos.' : 'Distância em cor neutra: referência descritiva do universo, não uma comparação entre pessoas equivalentes.') : `${AGRUP[ag]} de cada commit = ${ag === 'repo' || ag === 'stack' ? 'o do próprio commit' : `${AGRUP[ag].toLowerCase()} da pessoa vigente na data do commit`}.`}</div>`;
     const pg = paginar('tabela-' + ag, linhas.length, linhasQueCabem('tbl-wrap', ROW_TBL));
     body.querySelector('tbody').innerHTML = linhas.slice(pg.ini, pg.fim).map(tr).join('');
@@ -1813,12 +2023,14 @@ const UI = (() => {
     const seletor = `<div class="ctrl"><div class="ctrl-row">
       <div class="fl"><label for="det-tipo">Detalhar</label><select id="det-tipo" data-act="detTipo">${tipos.map(t => opt(t, tipoSel, AGRUP[t])).join('')}</select></div>
       <div class="fl"><label for="det-chave">${esc(AGRUP[tipoSel])} (${U.fmtInt(itens.length)} no filtro)</label><select data-act="detChave" id="det-chave" class="sel-largo">${d && d.chave !== null ? '' : '<option value="" selected>Escolha…</option>'}${itens.map(i => opt(i.v, d ? d.chave : null, i.r)).join('')}</select></div>
+      ${htmlMes(R, 'det-mesIni', 'mesIni')}${htmlMes(R, 'det-mesFim', 'mesFim')}
       ${dropFiltro(R, 'empresa')}${dropFiltro(R, 'tribo')}${dropFiltro(R, 'squad')}
       <button class="btn s xs" data-click="voltarGeral">← Visão geral</button>
-      <span class="recorte">período ${U.fmtMes(R.f.mesIni)} a ${U.fmtMes(R.f.mesFim)}${outros.length ? ` · também filtrado por ${esc(outros.join('; '))}` : ''} · ${esc(nomeRef(R))}</span></div></div>`;
+      <span class="recorte">período ${U.fmtMes(R.f.mesIni)} a ${U.fmtMes(R.f.mesFim)} (o mesmo da visão geral)${outros.length ? ` · também filtrado por ${esc(outros.join('; '))}` : ''} · ${esc(nomeRef(R))}</span></div></div>`;
     if (!d || d.chave === null) { sec.innerHTML = `<div class="pagina">${seletor}<div class="empty">${aviso ? `<div class="note box warn" style="max-width:640px;margin:0 auto 12px;text-align:left">${esc(aviso)}</div>` : ''}<p>Escolha uma pessoa, squad, tribo, empresa, repositório ou stack acima, ou clique numa linha da visão geral.</p></div></div>`; return; }
     const { tipo, chave } = d;
     const rows = R.rowsUniv.filter(r => Calc.chaveGrupo(r, tipo) === chave), rowsSP = R.rowsUnivSP.filter(r => Calc.chaveGrupo(r, tipo) === chave);
+    const atvRows = R.temAtv && tipo !== 'stack' ? R.atvUniv.filter(a => Calc.chaveGrupo(a, tipo) === chave) : [], atvS = Calc.somaAtv(atvRows);
     const pessoas = tipo === 'autor' ? [chave] : [...new Set(rows.map(r => r.pessoaId))];
     const nome = nomeGrupo(R, tipo, chave);
     const pes = tipo === 'autor' ? ctx.pessoas.get(chave) : null, attrsPes = tipo === 'autor' ? (R.attrs.get(chave) || Calc.atributosPessoa(ctx, chave, rows, R.meses, status)) : null;
@@ -1834,7 +2046,7 @@ const UI = (() => {
     if (pg === 1) {
       const v = Calc.variacao(serieValor(rowsSP), R.f.mesIni, R.f.mesFim, status, R.janela), ret = rows.filter(r => r.retrabalho).length, cAutor = tipo === 'autor' ? R.cls.pessoas.get(chave) : null;
       corpo = cabecalho + `<div class="kpi-strip">
-        <div class="kpi b"><div class="kpi-label"><span>Entrega estimada</span></div><div class="kpi-value">${U.fmtH(liq)}</div><div class="kpi-sub">${U.fmtInt(rows.length)} commits · brutas ${U.fmtH(Calc.somaBruta(rows))}${ret ? ` · ${U.fmtInt(ret)} de retrabalho já zerados` : ''}</div></div>
+        <div class="kpi b"><div class="kpi-label"><span>Entrega estimada</span></div><div class="kpi-value">${U.fmtH(liq)}</div><div class="kpi-sub">${U.fmtInt(rows.length)} commits · brutas ${U.fmtH(Calc.somaBruta(rows))}${ret ? ` · ${U.fmtInt(ret)} de retrabalho já zerados` : ''}${R.temAtv ? `<br>+ <b>${tipo === 'stack' ? '—' : U.fmtH(atvS.total)}</b> fora do commit <span class="m">(${tipo === 'stack' ? 'atividades não têm stack' : esc(txtAtv(atvS))})</span>` : ''}</div></div>
         ${kpiVar(v, R.janela, false)}
         ${cAutor ? `<div class="kpi ${cAutor.categoria === 'impulsionador' ? 't' : cAutor.categoria === 'detrator' ? 'a' : ''}"><div class="kpi-label"><span>Classificação</span><span>régua ${cAutor.base === 'tribo' ? 'da tribo' : 'do universo'}</span></div><div class="kpi-value">${catHtml(cAutor.categoria).replace('class="cat', 'style="font-size:20px" class="cat')}</div><div class="kpi-sub">${cAutor.razao === null ? 'sem régua' : `${fmtProd(cAutor.valor)} = ${U.fmtPct(cAutor.razao, 0)} da régua (${fmtProd(cAutor.regua)}${cAutor.base === 'tribo' ? ', tribo ' + esc(cAutor.tribo) : ''}, ${descMeta(R)})`}</div></div>` : ''}
         <div class="kpi t"><div class="kpi-label"><span>Participação no recorte</span></div><div class="kpi-value">${share === null ? '<span class="kpi-value small">Não calculável</span>' : U.fmtPct(share, 1)}</div><div class="kpi-sub">das ${U.fmtH(totalUniv)} líquidas do universo do recorte</div></div></div>
@@ -1845,35 +2057,123 @@ const UI = (() => {
         <div class="card fill"><div class="card-hdr"><div><div class="card-title">Composição por stack</div></div></div><div class="card-body" id="det-stack"></div></div>
         ${tipo !== 'autor' ? `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Pessoas</div><div class="card-sub">participação nas horas deste ${AGRUP[tipo].toLowerCase()}</div></div></div><div class="card-body" id="det-pessoas"></div></div>` : ''}</div>`;
     } else {
-      corpo = cabecalho + `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Commits do recorte</div><div class="card-sub">nível técnico · ${U.fmtInt(rows.length)} commits</div></div><div class="card-tools"><button class="btn s xs" data-click="expCommits">Exportar commits</button></div></div>
-        <div class="card-body"><div class="tbl-wrap fill" id="det-aud-wrap"></div><div class="pag-slot" id="det-aud-pag"></div></div></div>`;
+      const cds = cardsDetalhe(R, tipo, chave, rows), st = estadoTab('cc-commits'), sk = estadoTab('cc-cards');
+      App.detalheCards = cds;
+      const busca = (k, s, ph) => `<input type="search" class="ia-filtro-tab cc-busca" data-input="buscaTab" data-k="${k}" value="${esc(s.q)}" placeholder="${ph}" aria-label="${ph}">`;
+      corpo = cabecalho + `<div class="cc-grid">
+        <div class="card fill"><div class="card-hdr"><div><div class="card-title">Horas por mês</div><div class="card-sub" id="cc-sub"></div></div></div>
+          <div class="card-body"><div class="legend" id="cc-leg"></div><div class="chart-wrap fill"><canvas id="cc-horas" role="img" aria-label="Horas por mês"></canvas></div></div></div>
+        <div class="cc-tabs">
+          <div class="card fill"><div class="card-hdr"><div><div class="card-title">Commits do recorte</div><div class="card-sub">${U.fmtInt(rows.length)} commits · ${U.fmtH(liq)} líquidas${R.ctx.temCards ? ` · ${U.fmtInt(rows.filter(r => r.cards.length).length)} citando card` : ''}</div></div><div class="card-tools">${busca('cc-commits', st, 'Filtrar commits…')}<button class="btn s xs" data-click="expCommits">Exportar commits</button></div></div>
+            <div class="card-body"><div class="tbl-wrap fill" id="det-aud-wrap"></div><div class="pag-slot" id="det-aud-pag"></div></div></div>
+          <div class="card fill"><div class="card-hdr"><div><div class="card-title">Cards movimentados</div><div class="card-sub" title="${esc(cds.criterio)}">${R.ctx.temCards ? `${U.fmtInt(cds.length)} card(s) · ${esc(cds.criterioCurto)}` : 'sem base de cards'}</div></div><div class="card-tools">${R.ctx.temCards ? busca('cc-cards', sk, 'Filtrar cards…') + '<button class="btn s xs" data-click="expCards">Exportar cards</button>' : '<button class="btn o xs" data-click="irCards">Importar cards</button>'}</div></div>
+            <div class="card-body"><div class="tbl-wrap fill" id="det-cards-wrap"></div><div class="pag-slot" id="det-cards-pag"></div></div></div></div></div>`;
     }
     sec.innerHTML = `<div class="pagina">${seletor}${corpo}</div>`;
     App.detalheRows = rows;
     if (pg === 1) {
       const rot = R.meses.map(y => U.fmtMes(y) + (status.get(y) === 'parcial' ? '*' : ''));
-      if (tipo === 'autor') {
-        const s = Calc.serieMensal(rows, R.meses);
-        U.el('cd-sub').textContent = 'horas líquidas da pessoa por mês · * cobertura parcial';
-        U.el('cd-leg').innerHTML = `<div class="ld"><div class="ldot" style="background:${COR.primaria}"></div>horas líquidas</div>`;
-        chart('cd-evolucao', { type: 'bar', data: { labels: rot, datasets: [{ label: 'Horas líquidas', data: s.map(x => U.round(x.liq, 2)), backgroundColor: R.meses.map(y => status.get(y) === 'completo' ? COR.primaria : COR.clara), borderRadius: 3, borderSkipped: 'bottom', barPercentage: 0.66 }] }, options: opts(vv => U.fmtNum(vv, 0), c => `${U.fmtH(c.raw)} · ${U.fmtInt(s[c.dataIndex].commits)} commits`) });
-      } else {
+      if (tipo === 'autor') graficoHorasMes(R, rows, atvRows, { canvas: 'cd-evolucao', sub: 'cd-sub', leg: 'cd-leg' });
+      else {
         const univGrupo = new Set(pessoas);
         for (const id of R.universo) { const a = R.attrs.get(id); if (a && !univGrupo.has(id) && Calc.AGRUP_ATRIB.includes(tipo) && a[tipo] === chave) univGrupo.add(id); }
-        renderEvolucao(R, { barras: 'cd-evolucao', sub: 'cd-sub', leg: 'cd-leg' }, Calc.serieMensalDevs(ctx, rows, univGrupo, R.meses, status, R.lim, R.rg));
+        renderEvolucao(R, { barras: 'cd-evolucao', sub: 'cd-sub', leg: 'cd-leg' }, Calc.serieMensalDevs(ctx, rows, univGrupo, R.meses, status, R.lim, R.rg), atvRows);
       }
       renderDetRef(R, tipo, chave);
     } else if (pg === 2) {
-      tabelaComposicao('det-repo', Calc.participacao(Calc.porGrupo(rows, 'repo'), liq), 'Repositório');
+      const atvDe = ag => R.temAtv ? Calc.atvPorGrupo(atvRows, ag) : null;
+      tabelaComposicao('det-repo', Calc.participacao(Calc.porGrupo(rows, 'repo'), liq), 'Repositório', false, atvDe('repo'));
       tabelaComposicao('det-stack', Calc.participacao(Calc.porGrupo(rows, 'stack'), liq), 'Stack');
-      if (tipo !== 'autor') tabelaComposicao('det-pessoas', Calc.participacao(Calc.porGrupo(rows, 'autor'), liq).map(x => ({ ...x, nome: ctx.nomePessoa(x.chave), clique: `data-click="detalhe" data-tipo="autor" data-k="${esc(x.chave)}"` })), 'Pessoa', true);
+      if (tipo !== 'autor') tabelaComposicao('det-pessoas', Calc.participacao(Calc.porGrupo(rows, 'autor'), liq).map(x => ({ ...x, nome: ctx.nomePessoa(x.chave), clique: `data-click="detalhe" data-tipo="autor" data-k="${esc(x.chave)}"` })), 'Pessoa', true, atvDe('autor'));
     } else {
-      const ordenados = rows.slice().sort((a, b) => b.data.localeCompare(a.data));
-      U.el('det-aud-wrap').innerHTML = `<table class="tbl" id="det-aud" data-total="${ordenados.length}"><thead><tr><th>Data (GMT)</th><th>Repositório</th><th>Resumo</th><th>Stack</th>${tipo !== 'autor' ? '<th>Autor</th>' : ''}<th class="num">Horas</th><th class="num">Líquidas</th><th>Retrabalho</th><th>Risco</th><th>SHA</th></tr></thead><tbody></tbody></table>`;
-      const pgc = paginar('commits', ordenados.length, linhasQueCabem('det-aud-wrap', ROW_TBL));
-      U.el('det-aud-pag').innerHTML = pgc.html;
-      U.el('det-aud-wrap').querySelector('tbody').innerHTML = ordenados.slice(pgc.ini, pgc.fim).map(r => `<tr><td>${U.fmtDataHora(r.data)}</td><td>${esc(r.repo)}</td><td class="wrap" title="${esc(r.resumo)}\n${esc(r.justificativa)}">${esc(r.resumo)}</td><td>${esc(r.stack)}</td>${tipo !== 'autor' ? `<td>${esc(ctx.nomePessoa(r.pessoaId))}</td>` : ''}<td class="num">${U.fmtNum(r.horas, 2)}</td><td class="num">${U.fmtNum(r.horasLiq, 2)}</td><td>${r.retrabalho ? '<span class="pill pa">sim</span>' : ''}</td><td>${esc(r.risco)}</td><td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.sha.slice(0, 12))}</a>` : esc(r.sha.slice(0, 12))}</td></tr>`).join('');
+      graficoHorasMes(R, rows, atvRows, { canvas: 'cc-horas', sub: 'cc-sub', leg: 'cc-leg' }, App.detalheCards);
+      preencherCommitsCC(); preencherCardsCC();
     }
+  }
+  /* horas por mês (não por dev) de uma pessoa ou grupo: commits + atividades fora do commit empilhadas;
+     abaixo do eixo, commits e (com base de cards) cards movimentados no mês */
+  function graficoHorasMes(R, rows, atvRows, ids, cards) {
+    const { meses, status } = R, s = Calc.serieMensal(rows, meses), am = R.temAtv ? Calc.atvPorMes(atvRows) : null;
+    const rot = meses.map(y => U.fmtMes(y) + (status.get(y) === 'parcial' ? '*' : ''));
+    const vals = s.map(x => { const v = { commits: U.round(x.liq, 2) }, a = am && am.get(x.ym); Calc.TIPOS_ATV.forEach(t => v[t] = a ? a[t] : 0); return v; });
+    const tabela = [['Commits', s.map(x => x.commits), v => U.fmtInt(v)]];
+    if (cards && R.ctx.temCards) { const pm = new Map(); cards.lista.forEach(c => c.meses.forEach(m => pm.set(m, (pm.get(m) || 0) + 1))); tabela.push(['Cards', meses.map(y => pm.get(y) || 0), v => U.fmtInt(v)]); }
+    U.el(ids.sub).textContent = `horas estimadas líquidas por mês${R.temAtv ? ' · empilhadas: commits + revisão, integração e reexecução de CI (fora do commit) · rótulo = total' : ''} · * cobertura parcial${tabela.length > 1 ? ' · abaixo do eixo: commits e cards movimentados no mês' : ' · abaixo do eixo: commits no mês'}`;
+    U.el(ids.leg).innerHTML = `<div class="ld"><div class="ldot" style="background:${COR.primaria}"></div>${R.temAtv ? 'commits (horas líquidas)' : 'horas líquidas'}</div>${R.temAtv ? legAtv() : ''}`;
+    const esc2 = { x: { stacked: R.temAtv, grid: { display: false }, border: { display: false }, ticks: { padding: 6 } }, y: { stacked: R.temAtv, beginAtZero: true, grid: { color: COR.grade, drawTicks: false }, border: { display: false }, ticks: { padding: 6, callback: v => U.fmtNum(v, 0) } } };
+    chart(ids.canvas, { type: 'bar', plugins: [rotulosBarra, tabelaEixo(tabela)], data: { labels: rot, datasets: datasetsHoras(vals, meses.map(y => status.get(y) === 'completo' ? COR.primaria : COR.clara), R.temAtv, { label: 'Horas líquidas' }) },
+      options: opts(v => U.fmtNum(v, 0), c => R.temAtv ? `${c.dataset.label}: ${U.fmtH(c.raw)}${c.dataset.label === 'Commits' ? ` · ${U.fmtInt(s[c.dataIndex].commits)} commits` : ''}` : `${U.fmtH(c.raw)} · ${U.fmtInt(s[c.dataIndex].commits)} commits`,
+        { scales: esc2, layout: { padding: { top: 16, left: 66, bottom: tabela.length * 18 + 4 } } }) });
+  }
+
+  // ── Commits e Cards (detalhamento, página 3): tabelas filtráveis e ordenáveis ──
+  /* estado de busca e ordem de uma tabela da tela (sobrevive a re-render) */
+  function estadoTab(k) { App.tabs = App.tabs || {}; return App.tabs[k] || (App.tabs[k] = { q: '', col: null, dir: 1 }); }
+  function ordenarFiltrar(lista, st, cols, textoDe) {
+    const q = U.norm(st.q); let out = q ? lista.filter(x => U.norm(textoDe(x)).includes(q)) : lista.slice();
+    const c = cols.find(x => x.k === st.col);
+    if (c) out.sort((a, b) => { const x = c.v(a), y = c.v(b); return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x ?? '').localeCompare(String(y ?? ''), 'pt-BR')) * st.dir; });
+    return out;
+  }
+  const thOrd = (key, st, c) => `<th class="sortable ${c.num ? 'num' : ''}" data-click="ordTab" data-k="${key}" data-c="${c.k}" ${st.col === c.k ? `data-dir="${st.dir > 0 ? 'asc' : 'desc'}"` : ''} title="${esc(c.t || 'Clique para ordenar')}">${esc(c.r)}</th>`;
+  /* cards do detalhamento no período: da pessoa (ou das pessoas do grupo, pelo atributo no mês); para repositório e stack,
+     os cards citados pelos commits do recorte. Um card aparece uma vez, com meses, janelas e pessoas. */
+  function cardsDetalhe(R, tipo, chave, rows) {
+    const ctx = R.ctx, out = { lista: [], length: 0, criterio: '' }; if (!ctx.temCards) return out;
+    const f = R.f, dentro = c => (!f.mesIni || c.ym >= f.mesIni) && (!f.mesFim || c.ym <= f.mesFim);
+    const citados = new Map(); rows.forEach(r => r.cards.forEach(cod => citados.set(cod, (citados.get(cod) || 0) + 1)));
+    let base;
+    if (tipo === 'autor') { base = ctx.cards.filter(c => c.pessoaId === chave && dentro(c)); out.criterio = 'cards em que a pessoa é responsável, no período'; out.criterioCurto = 'pessoa responsável'; }
+    else if (Calc.AGRUP_ATRIB.includes(tipo)) { base = ctx.cards.filter(c => dentro(c) && (c[tipo] || '(sem)') === chave); out.criterio = `cards das pessoas do ${AGRUP[tipo].toLowerCase()} no período (atributo vigente no mês)`; out.criterioCurto = `pessoas do ${AGRUP[tipo].toLowerCase()}`; }
+    else { base = ctx.cards.filter(c => dentro(c) && citados.has(c.codigo)); out.criterio = 'cards citados nos commits do recorte'; out.criterioCurto = 'citados nos commits'; }
+    const m = new Map();
+    for (const c of base) {
+      const k = c.idCard || c.codigo; let x = m.get(k);
+      if (!x) m.set(k, x = { codigo: c.codigo, idCard: c.idCard, titulo: c.titulo, tipo: c.tipo, epico: c.epico, iniciativa: c.iniciativa, pai: c.pai, descricao: c.descricao, criadoEm: c.criadoEm, nResp: c.nResp, outros: c.outros, meses: new Set(), janelas: new Set(), pessoas: new Set(), novo: false, validar: false });
+      x.meses.add(c.ym); if (c.janela) x.janelas.add(c.janela); x.pessoas.add(c.semPessoa ? (c.pessoa || c.usuario) : ctx.nomePessoa(c.pessoaId)); if (c.criadoNoMes) x.novo = true; if (/validar/i.test(c.vinculo)) x.validar = true;
+    }
+    out.lista = [...m.values()].map(x => ({ ...x, meses: [...x.meses].sort(), janelas: [...x.janelas].sort(), pessoas: [...x.pessoas].sort((a, b) => a.localeCompare(b, 'pt-BR')), commits: citados.get(x.codigo) || 0 }))
+      .sort((a, b) => b.commits - a.commits || b.meses[b.meses.length - 1].localeCompare(a.meses[a.meses.length - 1]) || a.codigo.localeCompare(b.codigo));
+    out.length = out.lista.length;
+    return out;
+  }
+  const COLS_CC = tipo => [{ k: 'data', r: 'Data (GMT)', v: r => r.data }, { k: 'repo', r: 'Repositório', v: r => r.repo }, { k: 'resumo', r: 'Resumo', v: r => r.resumo },
+    ...(tipo !== 'autor' ? [{ k: 'autor', r: 'Autor', v: r => App.ctx.nomePessoa(r.pessoaId) }] : [{ k: 'horas', r: 'Horas', num: 1, v: r => r.horas, t: 'horas brutas (no grupo: veja na exportação)' }]), { k: 'liq', r: 'Líquidas', num: 1, v: r => r.horasLiq },
+    { k: 'ret', r: 'Retrab.', v: r => r.retrabalho ? 1 : 0, t: 'retrabalho: horas líquidas zeradas pelo motor' }, ...(App.ctx.temCards ? [{ k: 'card', r: 'Card', v: r => r.cards.join(' '), t: 'código do card citado na mensagem do commit' }] : []), { k: 'sha', r: 'SHA', v: r => r.sha }];
+  function preencherCommitsCC() {
+    const wrap = U.el('det-aud-wrap'); if (!wrap) return;
+    const d = App.detalhe, tipo = d ? d.tipo : 'autor', st = estadoTab('cc-commits'), cols = COLS_CC(tipo), ctx = App.ctx;
+    const titulos = new Map(); if (ctx.temCards) ctx.cards.forEach(c => { if (!titulos.has(c.codigo)) titulos.set(c.codigo, c.titulo); });
+    const base = (App.detalheRows || []).slice().sort((a, b) => b.data.localeCompare(a.data));
+    const lista = ordenarFiltrar(base, st, cols, r => `${r.repo} ${r.resumo} ${r.sha} ${r.cards.join(' ')} ${tipo !== 'autor' ? ctx.nomePessoa(r.pessoaId) : ''}`);
+    wrap.innerHTML = `<table class="tbl compacta" id="det-aud" data-total="${lista.length}"><thead><tr>${cols.map(c => thOrd('cc-commits', st, c)).join('')}</tr></thead><tbody></tbody></table>`;
+    const pgc = paginar('commits', lista.length, linhasQueCabem('det-aud-wrap', ROW_TBL));
+    U.el('det-aud-pag').innerHTML = pgc.html;
+    const cel = { data: r => `<td>${U.fmtDataHora(r.data)}</td>`, repo: r => `<td title="${esc(r.repo)}">${esc(r.repo.split('/').pop())}</td>`, resumo: r => `<td class="wrap" title="${esc(r.resumo)}\n${esc(r.justificativa)}${r.risco ? `\nrisco: ${esc(r.risco)}` : ''}\nstack: ${esc(r.stack)}">${esc(r.resumo)}</td>`,
+      autor: r => `<td>${esc(ctx.nomePessoa(r.pessoaId))}</td>`, horas: r => `<td class="num">${U.fmtNum(r.horas, 2)}</td>`, liq: r => `<td class="num">${U.fmtNum(r.horasLiq, 2)}</td>`, ret: r => `<td>${r.retrabalho ? '<span class="pill pa">sim</span>' : ''}</td>`,
+      card: r => `<td>${r.cards.map(c => `<span class="pill pt" title="${esc(titulos.get(c) || 'fora da base de cards')}">${esc(c)}</span>`).join(' ')}</td>`,
+      sha: r => `<td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.sha.slice(0, 12))}</a>` : esc(r.sha.slice(0, 12))}</td>` };
+    wrap.querySelector('tbody').innerHTML = lista.slice(pgc.ini, pgc.fim).map(r => `<tr>${cols.map(c => cel[c.k](r)).join('')}</tr>`).join('') || `<tr><td colspan="${cols.length}" class="note" style="padding:10px">${st.q ? 'Nenhum commit com esse filtro.' : 'Sem commits no período.'}</td></tr>`;
+  }
+  const COLS_CARDS = tipo => [{ k: 'codigo', r: 'Código', v: c => c.codigo }, { k: 'titulo', r: 'Card', v: c => c.titulo }, { k: 'tipo', r: 'Tipo', v: c => c.tipo },
+    { k: 'meses', r: 'Mês', v: c => c.meses[c.meses.length - 1], t: 'mês(es) em que o card foi movimentado no período' },
+    ...(tipo !== 'autor' ? [{ k: 'pessoas', r: 'Responsáveis', v: c => c.pessoas.join(', ') }] : []), { k: 'epico', r: 'Épico', v: c => c.epico },
+    { k: 'commits', r: 'Commits', num: 1, v: c => c.commits, t: 'commits do recorte que citam o card na mensagem' }];
+  function preencherCardsCC() {
+    const wrap = U.el('det-cards-wrap'); if (!wrap) return;
+    const ctx = App.ctx;
+    if (!ctx.temCards) { wrap.innerHTML = `<div class="empty" style="padding:20px"><p>Importe a base de cards do Kanban em Dados e cadastro › Cards Kanban para ver os cards movimentados no período.</p></div>`; U.el('det-cards-pag').innerHTML = ''; return; }
+    const d = App.detalhe, tipo = d ? d.tipo : 'autor', st = estadoTab('cc-cards'), cols = COLS_CARDS(tipo), cds = App.detalheCards || { lista: [] };
+    const lista = ordenarFiltrar(cds.lista, st, cols, c => `${c.codigo} ${c.titulo} ${c.tipo} ${c.epico} ${c.iniciativa} ${c.pessoas.join(' ')}`);
+    wrap.innerHTML = `<table class="tbl compacta" id="det-cards" data-total="${lista.length}"><thead><tr>${cols.map(c => thOrd('cc-cards', st, c)).join('')}</tr></thead><tbody></tbody></table>`;
+    const pgc = paginar('cards', lista.length, linhasQueCabem('det-cards-wrap', ROW_TBL));
+    U.el('det-cards-pag').innerHTML = pgc.html;
+    const dica = c => [c.titulo, c.pai && `pai: ${c.pai}`, c.iniciativa && `iniciativa: ${c.iniciativa}`, c.criadoEm && `criado em ${U.fmtData(c.criadoEm)}`, c.janelas.length && `janelas: ${c.janelas.join(', ')}`, c.outros && `outros responsáveis: ${c.outros}`, c.descricao].filter(Boolean).join('\n');
+    const cel = { codigo: c => `<td><b>${esc(c.codigo)}</b>${c.novo ? ' <span class="pill pt" title="criado no mês em que foi movimentado">novo</span>' : ''}${c.validar ? ' <span class="pill pa" title="vínculo pessoa × Kanban por sugestão (validar)">validar</span>' : ''}</td>`,
+      titulo: c => `<td class="wrap" title="${esc(dica(c))}">${esc(c.titulo)}</td>`, tipo: c => `<td>${esc(c.tipo)}</td>`, meses: c => `<td>${esc(c.meses.map(U.fmtMes).join(', '))}</td>`,
+      pessoas: c => `<td title="${esc(c.pessoas.join(', '))}">${esc(c.pessoas.length > 1 ? `${c.pessoas[0]} (+${c.pessoas.length - 1})` : c.pessoas[0] || '')}</td>`, epico: c => `<td title="${esc(c.epico)}">${esc(c.epico)}</td>`,
+      commits: c => `<td class="num">${c.commits ? `<b>${U.fmtInt(c.commits)}</b>` : nc('0')}</td>` };
+    wrap.querySelector('tbody').innerHTML = lista.slice(pgc.ini, pgc.fim).map(c => `<tr>${cols.map(k => cel[k.k](c)).join('')}</tr>`).join('') || `<tr><td colspan="${cols.length}" class="note" style="padding:10px">${st.q ? 'Nenhum card com esse filtro.' : 'Nenhum card movimentado no período.'}</td></tr>`;
   }
   /* opções do detalhamento dentro do recorte: commits já filtrados (período, empresa/tribo/squad pela data do commit, repositório…)
      + pessoas do universo (cadastradas vigentes sem commits) */
@@ -1900,30 +2200,35 @@ const UI = (() => {
       ${ref.motivo ? `<div class="note box warn" style="margin-top:10px"><b>${esc(ref.motivo)}</b>${criterios.length ? ' Amplie ou remova critérios (ou ajuste o período) para obter referência; nada é relaxado automaticamente.' : ''}</div>`
         : linha('', v => U.fmtH(v)) + (mc ? `<div class="mini" style="margin:4px 0 2px;font-weight:700">Por mês (média do período)</div>` + linha(' /mês', v => U.ok(v) ? `${U.fmtNum(v / mc, 1)} h/mês` : '—') : '<div class="mini">sem mês completo no período: média mensal não calculável</div>') + `<div class="mini">${esc(posicao)}</div>`}`;
   }
-  function tabelaComposicao(boxId, part, rotulo, comNome = false) {
+  /* atv (opcional): chave → horas fora do commit por tipo; vira três colunas depois das horas líquidas */
+  function tabelaComposicao(boxId, part, rotulo, comNome = false, atv = null) {
     const box = U.el(boxId); if (!box) return;
     if (!part.length) { box.innerHTML = '<div class="note">Sem dados no recorte.</div>'; return; }
     const n = App.projeto.parametros.topN, conc = Calc.concentracao(part.filter(x => x.liq > 0), n);
-    box.innerHTML = `<div class="tbl-wrap fill" id="${boxId}-wrap"><table class="tbl"><thead><tr><th>${rotulo}</th><th class="num">Horas líq.</th><th class="num">Commits</th><th class="num">Participação</th></tr></thead><tbody></tbody></table></div><div class="pag-slot" id="${boxId}-pag"></div>
-      ${part.length > 1 ? `<div class="mini">${n} maiores: ${conc.share === null ? 'não calculável' : U.fmtPct(conc.share, 1)} das horas</div>` : ''}`;
+    const thA = atv ? Calc.TIPOS_ATV.map(t => `<th class="num" title="${esc(Calc.ROTULO_ATV[t])} (fora do commit), horas no período">${esc(Calc.ROTULO_ATV_CURTO[t])}</th>`).join('') : '';
+    const tdA = x => atv ? Calc.TIPOS_ATV.map(t => { const a = atv.get(x.chave); return `<td class="num">${a && a[t] ? U.fmtNum(a[t], 1) : nc('0')}</td>`; }).join('') : '';
+    box.innerHTML = `<div class="tbl-wrap fill" id="${boxId}-wrap"><table class="tbl${atv ? ' compacta' : ''}"><thead><tr><th>${rotulo}</th><th class="num">${atv ? 'Commits (h)' : 'Horas líq.'}</th>${thA}<th class="num">Commits</th><th class="num">Participação</th></tr></thead><tbody></tbody></table></div><div class="pag-slot" id="${boxId}-pag"></div>
+      ${part.length > 1 ? `<div class="mini">${n} maiores: ${conc.share === null ? 'não calculável' : U.fmtPct(conc.share, 1)} das horas${atv ? ' de commits · participação só sobre commits' : ''}</div>` : ''}${!atv && App.ctx.temAtv && rotulo === 'Stack' ? '<div class="mini">Atividades fora do commit não têm stack.</div>' : ''}`;
     const pg = paginar(boxId, part.length, linhasQueCabem(boxId + '-wrap', ROW_TBL));
-    box.querySelector('tbody').innerHTML = part.slice(pg.ini, pg.fim).map(x => `<tr ${x.clique ? `class="click" ${x.clique}` : ''}><td>${esc(comNome ? x.nome : x.chave)}</td><td class="num">${U.fmtH(x.liq)}</td><td class="num">${U.fmtInt(x.commits)}</td><td class="num">${x.share === null ? nc() : `<span class="bar" style="width:${Math.round(x.share * 60)}px"></span>${U.fmtPct(x.share, 1)}`}</td></tr>`).join('');
+    box.querySelector('tbody').innerHTML = part.slice(pg.ini, pg.fim).map(x => `<tr ${x.clique ? `class="click" ${x.clique}` : ''}><td>${esc(comNome ? x.nome : x.chave)}</td><td class="num">${U.fmtH(x.liq)}</td>${tdA(x)}<td class="num">${U.fmtInt(x.commits)}</td><td class="num">${x.share === null ? nc() : `<span class="bar" style="width:${Math.round(x.share * 60)}px"></span>${U.fmtPct(x.share, 1)}`}</td></tr>`).join('');
     U.el(boxId + '-pag').innerHTML = pg.html;
   }
 
   // ═══ DADOS E CADASTRO ════════════════════════════════════════════════════
   function renderDados() {
     const sec = U.el('sec-dados'), sub = App.subAba || 'importar', p = App.projeto;
-    const abas = [['importar', 'Importar resultado'], ['cadastro', 'Dados Cadastrais'], ['metas', 'Metas'], ['parametros', 'Parâmetros'], ['projeto', 'Projeto e backup']];
+    const abas = [['importar', 'Importar resultado'], ['cards', 'Cards Kanban'], ['cadastro', 'Dados Cadastrais'], ['metas', 'Metas'], ['parametros', 'Parâmetros'], ['premissas', 'Premissas de Atividades Fora do Commit'], ['projeto', 'Projeto e backup']];
     let html = `<div class="subnav">${abas.map(([k, r]) => `<button data-click="subAba" data-k="${k}" class="${sub === k ? 'on' : ''}">${r}</button>`).join('')}</div>`;
-    if (sub === 'cadastro') html += htmlCadastro(p);
+    if (sub === 'cards') html += htmlCards(p);
+    else if (sub === 'premissas') html += htmlPremissas(p);
+    else if (sub === 'cadastro') html += htmlCadastro(p);
     else if (sub === 'metas') html += htmlMetas(p);
     else if (sub === 'parametros') html += htmlParametros(p);
     else if (sub === 'projeto') html += htmlProjeto(p);
     else html += htmlImportar(p);
     sec.innerHTML = `<div class="pagina">${html}</div>`;
     if (sub === 'cadastro') preencherCadastro();
-    if (sub === 'metas' && window.IA) IA.ativarTabelas(sec);
+    if ((sub === 'metas' || sub === 'premissas' || sub === 'cards') && window.IA) IA.ativarTabelas(sec);
     if (sub === 'projeto') Modelo.listarProjetos().then(l => { const box = U.el('proj-list'); if (!box) return; const pg = paginar('projetos', l.length, 6); box.innerHTML = l.slice(pg.ini, pg.fim).map(x => `<div class="proj ${x.id === p.id ? 'on' : ''}"><div><b>${esc(x.nome)}</b> ${x.demo ? '<span class="pill pa">demo</span>' : ''}<div class="mini">${U.fmtInt(x.nCommits)} commits · ${x.nFontes} arquivo(s) · atualizado em ${U.fmtDataHora(x.atualizadoEm)}</div></div>
       <div class="card-tools">${x.id === p.id ? '<span class="chip on">ativo</span>' : `<button class="btn s xs" data-click="trocarProjeto" data-k="${x.id}">Abrir</button>`}<button class="btn d xs" data-click="excluirProjeto" data-k="${x.id}">Excluir</button></div></div>`).join('') + pg.html || '<div class="note">Nenhum projeto salvo.</div>'; }).catch(() => { const box = U.el('proj-list'); if (box) box.innerHTML = '<div class="note err">Não foi possível listar os projetos (armazenamento indisponível).</div>'; });
   }
@@ -1932,16 +2237,70 @@ const UI = (() => {
     const fontes = lista.map(f => { const r = f.relatorio || {}; return `<div class="fonte ${f.demo ? 'demo' : ''}">
       <div class="fonte-h"><div><b>${esc(f.nomeArquivo)}</b> ${f.demo ? '<span class="pill pa">DEMONSTRATIVO</span>' : ''}<div class="mini">importado em ${U.fmtDataHora(f.importadoEm)} · aba usada: <b>${esc(f.abaUsada)}</b> · ${U.fmtInt(f.linhasLidas)} linhas · origem: ${esc((f.origens || []).join(', '))} · ${U.fmtInt(new Set((f.escopos || []).map(e => e.repo)).size)} repositório(s)</div></div>
         <button class="btn d xs" data-click="removerFonte" data-k="${f.id}">Remover</button></div>
+      ${f.atividadesLidas ? `<div class="mini">atividades fora do commit: <b>${U.fmtInt(f.atividadesLidas)}</b> evento(s) da aba "${esc(f.abaAtividades)}"${r.atvNovas !== undefined ? ` · ${U.fmtInt(r.atvNovas)} nova(s), ${U.fmtInt(r.atvAtualizadas)} atualizada(s)${r.atvIgnoradasAntigas ? `, ${U.fmtInt(r.atvIgnoradasAntigas)} ignorada(s) por versão antiga` : ''}` : ''}</div>` : ''}
       <div class="fonte-cfg">${(f.configuracoes || []).map(c => `<span>• ${cs.length > 1 ? esc(rotuloConfig(c.key)) + ': ' : ''}${U.fmtInt(c.linhas)} commits, ${U.fmtH(c.horasLiq)} líq., ${U.fmtData(c.inicio)} a ${U.fmtData(c.fim)}${c.execucoes.length ? `, execução ${c.execucoes.map(U.fmtDataHora).join(' / ')}` : ', sem carimbo de execução'}</span>`).join('')}</div>
       <div class="mini" style="margin-top:6px">Mesclagem: ${U.fmtInt(r.novas)} nova(s) · ${U.fmtInt(r.substituidasIguais)} já existente(s) iguais · ${U.fmtInt(r.substituidasAlteradas)} atualizada(s) · ${U.fmtInt(r.ignoradasAntigas)} ignorada(s) por versão antiga${r.repetidasNoArquivo ? ` · <b>${U.fmtInt(r.repetidasNoArquivo)} repetida(s) dentro do arquivo</b>` : ''}${r.conflitosSemVersao ? ` · ${U.fmtInt(r.conflitosSemVersao)} conflito(s) sem versão` : ''}</div>
       ${(f.avisos || []).length ? `<div class="note warn box" style="margin:8px 0 0">${f.avisos.slice(0, 3).map(esc).join('<br>')}${f.avisos.length > 3 ? `<br>… e mais ${f.avisos.length - 3}` : ''}</div>` : ''}
       <div class="fonte-cob"><span>Período coletado:</span><input type="date" value="${f.cobertura.inicio}" data-act="cobIni" data-k="${f.id}"> a <input type="date" value="${f.cobertura.fim}" data-act="cobFim" data-k="${f.id}"> <span class="mini">${f.cobertura.editada ? 'editado pelo usuário' : 'inferido do primeiro e último commit do arquivo'} · vale para os repositórios deste arquivo</span></div></div>`; }).join('');
     return `<div class="input-panel ${p.fontes.length ? 'has-data' : ''}" data-drop="motor"><div class="input-hdr"><div><div class="input-title">Resultado do motor (Excel exportado pela ferramenta de análise offline de commits)</div>
-      <div class="input-desc">Aceita um ou mais arquivos <b>.xlsx</b> (ou .csv gerado pelo motor). Lê a aba <b>Histórico de commits</b> (acumulado, já inclui a execução corrente) ou, na falta dela, a aba <b>Commits</b>. Arquivos repetidos ou períodos sobrepostos não duplicam horas: cada commit é identificado por origem, repositório e SHA, e a estimativa mais recente prevalece.</div></div>
+      <div class="input-desc">Aceita um ou mais arquivos <b>.xlsx</b> (ou .csv gerado pelo motor). Lê a aba <b>Histórico de commits</b> (acumulado, já inclui a execução corrente) ou, na falta dela, a aba <b>Commits</b>. Arquivos repetidos ou períodos sobrepostos não duplicam horas: cada commit é identificado por origem, repositório e SHA, e a estimativa mais recente prevalece. Do mesmo arquivo vêm as <b>atividades fora do commit</b> (aba Histórico de atividades ou Atividades fora do commit: revisão, integração e reexecução de CI); veja as premissas na aba própria.</div></div>
       <div class="input-actions"><label class="btn p" for="f-motor">⬆ Importar resultado</label><input type="file" id="f-motor" multiple accept=".xlsx,.xls,.csv" data-act="fileMotor"><button class="btn s" data-click="demo">▶ Dados demonstrativos</button>${typeof DEMO_ARQUIVOS !== 'undefined' ? '<button class="btn o" data-click="baixarExemplo" data-k="demo_motor.xlsx">⬇ Exemplo de arquivo do motor</button>' : ''}</div></div></div>
       ${cs.length > 1 ? `<div class="card"><div class="card-hdr"><div><div class="card-title">Bases de estimativa no arquivo</div><div class="card-sub">o arquivo trouxe mais de uma base de estimativas para os mesmos commits; são alternativas e só uma entra nos totais</div></div></div>
         <div class="card-body"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ativa</th><th>Base</th><th class="num">Commits</th><th>Período</th><th>Execuções</th></tr></thead><tbody>${cs.map(c => { const info = p.fontes.flatMap(f => (f.configuracoes || []).filter(x => x.key === c.key)); const ex = [...new Set(info.flatMap(x => x.execucoes))].sort(); return `<tr><td><input type="radio" name="cfg" value="${esc(c.key)}" data-act="config" ${c.key === p.configAtiva ? 'checked' : ''}></td><td>${esc(rotuloConfig(c.key))}</td><td class="num">${U.fmtInt(c.linhas)}</td><td>${info.length ? `${U.fmtData(info.map(x => x.inicio).sort()[0])} a ${U.fmtData(info.map(x => x.fim).sort().slice(-1)[0])}` : '—'}</td><td>${ex.length ? ex.map(U.fmtDataHora).join(' / ') : 'sem carimbo'}</td></tr>`; }).join('')}</tbody></table></div></div></div>` : ''}
       ${p.fontes.length ? `<div class="fill-col"><h3 style="font-size:13px;margin:4px 0 6px">Histórico de importações (${p.fontes.length})</h3>${fontes}${pg.html}</div>` : '<div class="note">Nenhum arquivo importado ainda.</div>'}`;
+  }
+  /* aba Cards Kanban: importação (várias cargas, sem duplicar) e resumo da base */
+  function htmlCards(p) {
+    const cb = p.cards || Modelo.CARDS_PADRAO(), ctx = App.ctx, cs = ctx.cards, pgF = paginar('fontes-cards', cb.fontes.length, 2);
+    const fontes = cb.fontes.slice().reverse().slice(pgF.ini, pgF.fim).map(f => `<div class="fonte"><div class="fonte-h"><div><b>${esc(f.nomeArquivo)}</b><div class="mini">importado em ${U.fmtDataHora(f.importadoEm)} · aba usada: <b>${esc(f.abaUsada)}</b> · ${U.fmtInt(f.linhas)} linhas · ${U.fmtInt(f.cards)} cards · ${U.fmtInt(f.pessoas)} pessoas · ${U.fmtMes(f.periodo.inicio)} a ${U.fmtMes(f.periodo.fim)} · ${U.fmtInt(f.commitsCitando)} commits citando card</div>
+      <div class="mini">Mesclagem: ${U.fmtInt(f.novos)} nova(s) · ${U.fmtInt(f.atualizados)} já existente(s), atualizada(s)</div></div><button class="btn d xs" data-click="removerFonteCards" data-k="${f.id}">Remover</button></div>
+      ${(f.avisos || []).length ? `<div class="note warn box" style="margin:8px 0 0">${f.avisos.slice(0, 3).map(esc).join('<br>')}</div>` : ''}</div>`).join('');
+    const painel = `<div class="input-panel ${cb.fontes.length ? 'has-data' : ''}" data-drop="cards"><div class="input-hdr"><div><div class="input-title">Cards do Kanban (Excel "Commits × Cards Kanban")</div>
+      <div class="input-desc">Lê a aba <b>Cards</b> (um card movimentado × pessoa responsável × janela do extrato), a aba <b>Commits</b> (código do card citado na mensagem de cada commit) e a aba <b>Janelas</b>. Pode carregar vários arquivos: o mesmo card, pessoa e janela não duplica, e a carga mais recente prevalece. A pessoa é ligada pelo ID cadastral ou pelo e-mail que assina os commits. Os cards aparecem em Detalhamento › Commits e Cards.</div></div>
+      <div class="input-actions"><label class="btn p" for="f-cards">⬆ Importar cards</label><input type="file" id="f-cards" multiple accept=".xlsx,.xls" data-act="fileCards"></div></div></div>`;
+    if (!cs.length) return painel + '<div class="note">Nenhuma base de cards importada ainda.</div>';
+    const porMes = new Map(); cs.forEach(c => { let x = porMes.get(c.ym); if (!x) porMes.set(c.ym, x = { cards: new Set(), novos: new Set(), pessoas: new Set(), linhas: 0 }); x.linhas++; x.cards.add(c.idCard || c.codigo); if (c.criadoNoMes) x.novos.add(c.idCard || c.codigo); x.pessoas.add(c.pessoaId); });
+    const semPessoa = new Set(cs.filter(c => c.semPessoa).map(c => c.usuario || c.idPessoa)), vinc = {}; cs.forEach(c => { const v = c.vinculo || '(não informado)'; vinc[v] = (vinc[v] || 0) + 1; });
+    const citando = ctx.rows.filter(r => r.cards.length).length;
+    return painel + `<div class="grid-2 fill"><div class="card fill"><div class="card-hdr"><div><div class="card-title">Cards movimentados por mês</div><div class="card-sub">cards distintos no mês · um card pode ter mais de um responsável</div></div></div>
+        <div class="card-body"><div class="tbl-wrap fill" style="overflow:auto"><table class="tbl compacta ia-int"><thead><tr><th>Mês</th><th class="num">Cards</th><th class="num">Criados no mês</th><th class="num">Pessoas</th><th class="num">Linhas</th></tr></thead>
+        <tbody>${[...porMes.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([y, x]) => `<tr><td>${U.fmtMes(y)}</td><td class="num">${U.fmtInt(x.cards.size)}</td><td class="num">${U.fmtInt(x.novos.size)}</td><td class="num">${U.fmtInt(x.pessoas.size)}</td><td class="num">${U.fmtInt(x.linhas)}</td></tr>`).join('')}</tbody></table></div>${fontes}${pgF.html}</div></div>
+      <div class="card fill"><div class="card-hdr"><div><div class="card-title">Vínculo com as pessoas da análise</div><div class="card-sub">${U.fmtInt(citando)} commits da base citam um card · ${U.fmtInt(semPessoa.size)} responsável(is) do Kanban sem pessoa correspondente nos commits nem no cadastro</div></div></div>
+        <div class="card-body"><div class="tbl-wrap fill" style="overflow:auto"><table class="tbl compacta ia-int"><thead><tr><th>Vínculo Kanban (arquivo)</th><th class="num">Linhas</th><th class="num">%</th></tr></thead><tbody>${Object.entries(vinc).sort((a, b) => b[1] - a[1]).map(([v, n]) => `<tr><td>${esc(v)}</td><td class="num">${U.fmtInt(n)}</td><td class="num">${U.fmtPct(n / cs.length, 0)}</td></tr>`).join('')}</tbody></table>
+        ${semPessoa.size ? `<div class="mini" style="margin-top:8px">Sem correspondência: ${esc([...semPessoa].slice(0, 12).join(', '))}${semPessoa.size > 12 ? '…' : ''}. Inclua o e-mail como alias Git no cadastro para ligá-los.</div>` : ''}</div></div></div></div>`;
+  }
+  /* aba Premissas de Atividades Fora do Commit: regras do motor, números da base e como a aplicação usa */
+  function htmlPremissas(p) {
+    const ctx = App.ctx, atv = ctx.atv, fonte = p.fontes.slice().reverse().find(f => (f.parametrosMotor || []).length), par = fonte ? fonte.parametrosMotor : [];
+    const val = re => { const x = par.find(([k]) => re.test(U.normHeader(k))); return x ? x[1] : null; };
+    const h = v => v === null ? '<span class="nc">não informado</span>' : `<b>${esc(v)}</b>`;
+    const REGRAS = {
+      revisao: { oque: 'Revisão de merge request.', regra: `k × horas estimadas do MR, com k = ${h(val(/^revisao k/))}, piso de ${h(val(/^revisao piso/))} h e teto de ${h(val(/^revisao teto/))} h por revisão.` },
+      integracao: { oque: 'Integração (merge) do MR por quem o integra.', regra: `valor fixo de ${h(val(/^integracao horas/))} h por MR integrado.` },
+      ci: { oque: 'Reexecução de pipeline ou job de CI após falha.', regra: `valor fixo de ${h(val(/^reexecucao de ci horas/))} h por evento, até ${h(val(/^reexecucao de ci teto/))} eventos por SHA.` },
+    };
+    const est = {}; Calc.TIPOS_ATV.forEach(t => est[t] = { n: 0, h: 0, pessoas: new Set(), mrs: new Set(), bases: new Map() });
+    atv.forEach(a => { const e = est[a.tipo]; e.n++; e.h += a.horas; e.pessoas.add(a.pessoaId); if (a.mr) e.mrs.add(a.repo + a.mr); const b = String(a.base || '').replace(/#\d+/g, '#n').replace(/SHA [0-9a-f]+/gi, 'SHA …').replace(/\d+(?:,\d+)?/g, 'n'); e.bases.set(b, (e.bases.get(b) || 0) + 1); });
+    const tot = atv.reduce((s, a) => s + a.horas, 0), totCommits = Calc.somaLiq(ctx.rows);
+    const meses = atv.length ? [atv[0].ym, atv[atv.length - 1].ym] : null;
+    const linhas = Calc.TIPOS_ATV.map(t => { const e = est[t]; return `<tr><td><span class="ldot" style="display:inline-block;margin-right:6px;background:${COR_ATV[t]}"></span><b>${esc(Calc.ROTULO_ATV[t])}</b></td><td class="wrap pl-acao">${REGRAS[t].oque}</td><td class="wrap pl-acao">${REGRAS[t].regra}</td>
+      <td class="num">${U.fmtInt(e.n)}</td><td class="num">${U.fmtNum(e.h, 1)}</td><td class="num">${e.n ? U.fmtNum(e.h / e.n, 2) : '—'}</td><td class="num">${U.fmtInt(e.pessoas.size)}</td><td class="num">${tot ? U.fmtPct(e.h / tot, 0) : '—'}</td></tr>`; }).join('');
+    const bases = Calc.TIPOS_ATV.flatMap(t => [...est[t].bases.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([b, n]) => `<tr><td>${esc(Calc.ROTULO_ATV[t])}</td><td>${esc(b || '(vazio)')}</td><td class="num">${U.fmtInt(n)}</td></tr>`)).join('');
+    const parAtv = par.filter(([k]) => /revis|integr|reexec|atividade|conta.*servic/i.test(U.normHeader(k)));
+    const aviso = atv.length ? '' : `<div class="note box warn">Nenhuma atividade fora do commit na base. Elas vêm da aba <b>Atividades fora do commit</b> (ou <b>Histórico de atividades</b>) do mesmo Excel do motor: reimporte o arquivo em "Importar resultado".</div>`;
+    return `${aviso}<div class="card"><div class="card-hdr"><div><div class="card-title">Premissas de Atividades Fora do Commit</div><div class="card-sub">esforço estimado em atividades de merge request que não geram commit · ${atv.length ? `${U.fmtInt(atv.length)} eventos, ${U.fmtH(tot)} (${totCommits ? U.fmtPct(tot / totCommits, 0) : '—'} das ${U.fmtH(totCommits)} de commits) · ${U.fmtMes(meses[0])} a ${U.fmtMes(meses[1])}` : 'sem dados'}${fonte ? ` · parâmetros de ${esc(fonte.nomeArquivo)}` : ''}</div></div></div>
+      <div class="card-body"><div class="tbl-wrap"><table class="tbl compacta"><thead><tr><th>Atividade</th><th>O que é</th><th>Regra de horas (motor)</th><th class="num">Eventos</th><th class="num">Horas</th><th class="num">h/evento</th><th class="num">Pessoas</th><th class="num">% das horas</th></tr></thead><tbody>${linhas}</tbody></table></div></div></div>
+      <div class="grid-2 fill"><div class="card fill"><div class="card-hdr"><div><div class="card-title">Como a aplicação usa</div></div></div><div class="card-body" style="overflow:auto"><div class="note">
+        • Revisão, Integração e Reexecução de CI aparecem <b>ao lado</b> das horas de commits: três colunas a mais nas tabelas e três cores a mais nas barras empilhadas.<br>
+        • Elas <b>não entram</b> na produtividade, na meta, na classificação (detratores / impulsionadores), na referência nem na variação: esses números seguem só com horas de commits.<br>
+        • Pessoa: "Pessoa (Usuário)" + origem do MR, a mesma identidade dos commits (se o usuário não aparece nos commits, usa a conta do GitLab); o cadastro liga pelos aliases.<br>
+        • Mês e atributos (empresa, tribo, squad) pela data do evento; repositório = o do MR. Atividades não têm stack: com filtro ou agrupamento por stack, ficam de fora.<br>
+        • Por mês e desenvolvedor: horas do mês ÷ os mesmos desenvolvedores do mês usados nas barras de commits. Por mês: horas do período ÷ meses completos.<br>
+        • Arquivo: vale a aba "Histórico de atividades" (acumulado); sem ela, "Atividades fora do commit". Evento repetido (mesmo MR, tipo, pessoa, data e pipeline) conta uma vez; a execução mais recente prevalece.<br>
+        ${val(/^contas de servico/) ? `• Contas de serviço identificadas pelo motor (trechos do username): ${esc(val(/^contas de servico/))}.` : ''}</div></div></div>
+      <div class="card fill"><div class="card-hdr"><div><div class="card-title">Parâmetros e bases de cálculo</div><div class="card-sub">aba "Parâmetros" do motor e textos da coluna "Base do cálculo" mais frequentes</div></div></div>
+        <div class="card-body"><div class="tbl-wrap fill" style="overflow:auto">${parAtv.length ? `<table class="tbl compacta ia-int"><thead><tr><th>Parâmetro</th><th>Valor</th></tr></thead><tbody>${parAtv.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>` : '<div class="note">O arquivo importado não trouxe a aba "Parâmetros".</div>'}
+        ${bases ? `<table class="tbl compacta ia-int" style="margin-top:10px"><thead><tr><th>Atividade</th><th>Base do cálculo (n = número)</th><th class="num">Eventos</th></tr></thead><tbody>${bases}</tbody></table>` : ''}</div></div></div></div>`;
   }
   function htmlCadastro(p) {
     const regs = p.cadastros.pessoas || [], def = Modelo.CAD.pessoas, avisos = App.avisosCadastro || [];
@@ -2027,18 +2386,26 @@ const UI = (() => {
       ['Critérios de segmentação', descCriterios(R)], ['Referência', nomeRef(R)], ['Mínimo de pares', p.parametros.minPares],
       ['Filtros', fil.join(' | ') || 'nenhum'], ['Agrupamento', AGRUP[ag]], ['Commits no recorte', R.rows.length], ['Pessoas no recorte', R.pessoasIds.length], ['Universo de comparação (pessoas)', R.universo.size],
       ['Arquivos importados', p.fontes.map(x => `${x.nomeArquivo}${x.demo ? ' (DEMONSTRATIVO)' : ''} [${U.fmtData(x.cobertura.inicio)}–${U.fmtData(x.cobertura.fim)}]`).join(' | ')],
-      ['Dados demonstrativos', p.fontes.some(x => x.demo) ? 'SIM — dados sintéticos' : 'não'], [],
+      ['Dados demonstrativos', p.fontes.some(x => x.demo) ? 'SIM — dados sintéticos' : 'não'],
+      ['Atividades fora do commit', R.temAtv ? `${U.fmtNum(R.atvTot.total, 1)} h no recorte (${txtAtv(R.atvTot)}); exibidas ao lado das horas de commits, fora da produtividade, da meta e da classificação` : 'não importadas'],
+      ['Cards do Kanban', ctx.temCards ? `${U.fmtInt(new Set(ctx.cards.map(c => c.idCard || c.codigo)).size)} cards na base` : 'não importados'], [],
       ['Nota metodológica', 'Horas representam esforço estimado no código entregue; não são apontamento de horas reais nem medida de qualidade ou valor.']];
     const wb = XLSX.utils.book_new();
     const ws0 = XLSX.utils.aoa_to_sheet(meta); ws0['!cols'] = [{ wch: 32 }, { wch: 110 }]; XLSX.utils.book_append_sheet(wb, ws0, 'Recorte');
-    const cab = [AGRUP[ag], 'Horas por mês (período)', 'Horas líquidas', 'Horas brutas', 'Variação (%)', 'Janela atual', 'Janela anterior', 'Motivo variação', 'Distância da referência (%)', 'Referência (mediana)', 'Pares (n)', 'Motivo referência', 'Participação (%)', 'Pessoas', 'Commits', 'Sem commits no período'];
-    const linhasX = linhas.map(l => [l.nome, l.porMes === null ? null : U.round(l.porMes), U.round(l.liq), U.round(l.bruta), l.variacao.variacao === null ? null : U.round(l.variacao.variacao, 4), perMeses(l.variacao.mesesAtual || []), perMeses(l.variacao.mesesAnt || []), l.variacao.motivo || '', l.dist === null ? null : U.round(l.dist, 4), l.ref && !l.ref.motivo ? U.round(l.ref.mediana, 4) : null, l.ref ? l.ref.n : null, l.distMotivo || '', l.share === null ? null : U.round(l.share, 4), l.pessoas, l.commits, l.semCommits ? 'sim' : '']);
-    const ws1 = XLSX.utils.aoa_to_sheet([cab, ...linhasX]); aplicarFormatos(ws1, cab, { 'Horas por mês (período)': '#,##0.0', 'Horas líquidas': '#,##0.0', 'Horas brutas': '#,##0.0', 'Variação (%)': '0.0%', 'Distância da referência (%)': '0.0%', 'Referência (mediana)': '#,##0.0', 'Participação (%)': '0.0%' });
+    const comAtv = R.temAtv, mc = R.mesesCompletos, TA = Calc.TIPOS_ATV, RA = Calc.ROTULO_ATV;
+    const cabMes = comAtv ? TA.map(t => `${RA[t]} (h/mês)`) : [], cabTot = comAtv ? TA.map(t => `${RA[t]} (h)`) : [];
+    const cab = [AGRUP[ag], 'Horas por mês (período)', ...cabMes, 'Horas líquidas', ...cabTot, 'Horas brutas', 'Variação (%)', 'Janela atual', 'Janela anterior', 'Motivo variação', 'Distância da referência (%)', 'Referência (mediana)', 'Pares (n)', 'Motivo referência', 'Participação (%)', 'Pessoas', 'Commits', 'Sem commits no período'];
+    const vAtv = (l, div) => !comAtv ? [] : TA.map(t => l.atv && div ? U.round(l.atv[t] / div) : null);
+    const linhasX = linhas.map(l => [l.nome, l.porMes === null ? null : U.round(l.porMes), ...vAtv(l, mc), U.round(l.liq), ...vAtv(l, 1), U.round(l.bruta), l.variacao.variacao === null ? null : U.round(l.variacao.variacao, 4), perMeses(l.variacao.mesesAtual || []), perMeses(l.variacao.mesesAnt || []), l.variacao.motivo || '', l.dist === null ? null : U.round(l.dist, 4), l.ref && !l.ref.motivo ? U.round(l.ref.mediana, 4) : null, l.ref ? l.ref.n : null, l.distMotivo || '', l.share === null ? null : U.round(l.share, 4), l.pessoas, l.commits, l.semCommits ? 'sim' : '']);
+    const fmtAtv = Object.fromEntries([...cabMes, ...cabTot].map(c => [c, '#,##0.0']));
+    const ws1 = XLSX.utils.aoa_to_sheet([cab, ...linhasX]); aplicarFormatos(ws1, cab, { 'Horas por mês (período)': '#,##0.0', 'Horas líquidas': '#,##0.0', 'Horas brutas': '#,##0.0', 'Variação (%)': '0.0%', 'Distância da referência (%)': '0.0%', 'Referência (mediana)': '#,##0.0', 'Participação (%)': '0.0%', ...fmtAtv });
     ws1['!cols'] = cab.map(c => ({ wch: Math.max(14, c.length + 2) })); XLSX.utils.book_append_sheet(wb, ws1, 'Tabela');
     const s = Calc.serieMensal(R.rows, R.meses), sd = R.serie;
-    const cab2 = ['Mês', 'Cobertura', 'Horas líquidas', 'Horas brutas', 'Commits', 'Desenvolvedores', 'Horas por desenvolvedor', 'Meta (h/mês·dev)', 'Detratores', 'Neutros', 'Impulsionadores', 'Sem meta'];
-    const ws2 = XLSX.utils.aoa_to_sheet([cab2, ...s.map((x, i) => [U.fmtMesNum(x.ym), R.status.get(x.ym) || 'sem-dados', U.round(x.liq), U.round(x.bruta), x.commits, sd[i].devs, sd[i].horasPorDev === null ? null : U.round(sd[i].horasPorDev), U.ok(sd[i].meta) ? U.round(sd[i].meta) : null, sd[i].detrator, sd[i].neutro, sd[i].impulsionador, sd[i].semRegua])]);
-    aplicarFormatos(ws2, cab2, { 'Horas líquidas': '#,##0.0', 'Horas brutas': '#,##0.0', 'Horas por desenvolvedor': '#,##0.0', 'Meta (h/mês·dev)': '#,##0.0' }); XLSX.utils.book_append_sheet(wb, ws2, 'Série mensal');
+    const am = comAtv ? Calc.atvPorMes(R.atv) : null, cabS = comAtv ? [...cabTot, ...TA.map(t => `${RA[t]} (h/dev)`)] : [];
+    const cab2 = ['Mês', 'Cobertura', 'Horas líquidas', 'Horas brutas', 'Commits', 'Desenvolvedores', 'Horas por desenvolvedor', ...cabS, 'Meta (h/mês·dev)', 'Detratores', 'Neutros', 'Impulsionadores', 'Sem meta'];
+    const vS = (x, i) => { if (!comAtv) return []; const a = am.get(x.ym) || Calc.zeroAtv(); return [...TA.map(t => U.round(a[t])), ...TA.map(t => sd[i].devs ? U.round(a[t] / sd[i].devs) : null)]; };
+    const ws2 = XLSX.utils.aoa_to_sheet([cab2, ...s.map((x, i) => [U.fmtMesNum(x.ym), R.status.get(x.ym) || 'sem-dados', U.round(x.liq), U.round(x.bruta), x.commits, sd[i].devs, sd[i].horasPorDev === null ? null : U.round(sd[i].horasPorDev), ...vS(x, i), U.ok(sd[i].meta) ? U.round(sd[i].meta) : null, sd[i].detrator, sd[i].neutro, sd[i].impulsionador, sd[i].semRegua])]);
+    aplicarFormatos(ws2, cab2, { 'Horas líquidas': '#,##0.0', 'Horas brutas': '#,##0.0', 'Horas por desenvolvedor': '#,##0.0', 'Meta (h/mês·dev)': '#,##0.0', ...Object.fromEntries(cabS.map(c => [c, '#,##0.0'])) }); XLSX.utils.book_append_sheet(wb, ws2, 'Série mensal');
     const cab4 = ['Pessoa', 'Empresa', 'Tribo', 'Squad', 'Horas líquidas no período', 'Produtividade (h/mês)', 'Meta (h/mês)', 'Base da meta', 'Definição da meta', 'Razão', 'Categoria'];
     const cls = [...R.cls.pessoas.entries()].filter(([id]) => R.pessoasIds.includes(id)).sort((a, b) => (b[1].razao ?? -1) - (a[1].razao ?? -1));
     const ws4 = XLSX.utils.aoa_to_sheet([cab4, ...cls.map(([id, c]) => [ctx.nomePessoa(id), (R.attrs.get(id) || {}).empresa || '', c.tribo, (R.attrs.get(id) || {}).squad || '', U.round(R.obs.get(id) || 0), U.round(c.valor), U.ok(c.regua) ? U.round(c.regua) : null, c.base, descMeta(R), c.razao === null ? null : U.round(c.razao, 4), c.categoria ? Calc.ROTULO_CAT[c.categoria] : 'sem régua'])]);
@@ -2055,7 +2422,13 @@ const UI = (() => {
     const cab3 = ['Data (GMT)', 'Repositório', 'Origem', 'Pessoa', 'Autor (Usuário)', 'Empresa', 'Tribo', 'Squad', 'Stack', 'Categoria', 'Resumo', 'Horas', 'Horas líquidas', 'Retrabalho', 'Risco', 'SHA', 'URL', 'Execução'];
     const ws3 = XLSX.utils.aoa_to_sheet([cab3, ...R.rows.slice(0, 200000).map(r => [U.fmtDataHora(r.data), r.repo, r.origem, ctx.nomePessoa(r.pessoaId), r.autorUsuario, r.empresa, r.tribo, r.squad, r.stack, r.categoria, r.resumo, r.horas, r.horasLiq, r.retrabalho ? 'sim' : '', r.risco, r.sha, r.url, r.execucao ? U.fmtDataHora(r.execucao) : ''])]);
     aplicarFormatos(ws3, cab3, { 'Horas': '#,##0.00', 'Horas líquidas': '#,##0.00' }); XLSX.utils.book_append_sheet(wb, ws3, 'Commits do recorte');
+    if (comAtv) XLSX.utils.book_append_sheet(wb, sheetAtividades(R.atv), 'Atividades do recorte');
     return wb;
+  }
+  function sheetAtividades(atv) {
+    const ctx = App.ctx, cab = ['Data (GMT)', 'Tipo', 'Pessoa', 'Empresa', 'Tribo', 'Squad', 'Repositório', 'MR', 'URL do MR', 'Horas', 'Base do cálculo', 'Pipeline'];
+    const ws = XLSX.utils.aoa_to_sheet([cab, ...atv.slice(0, 200000).map(a => [U.fmtDataHora(a.data), Calc.ROTULO_ATV[a.tipo], ctx.nomePessoa(a.pessoaId), a.empresa, a.tribo, a.squad, a.repo, a.mr, a.urlMr, a.horas, a.base, a.pipeline])]);
+    aplicarFormatos(ws, cab, { 'Horas': '#,##0.00' }); return ws;
   }
   function aplicarFormatos(ws, cab, fmts) {
     const range = XLSX.utils.decode_range(ws['!ref']);
@@ -2103,8 +2476,20 @@ const UI = (() => {
     detChave: el => { if (el.value !== '') App.abrirDetalhe(App.detalhe ? App.detalhe.tipo : 'autor', el.value); },
     expRecorte: () => App.exportarRecorte(), expSerie: () => { const wb = workbookParcial(['Série mensal']); if (wb) App.baixarWorkbook(wb, `serie-mensal-${U.hojeISO().slice(0, 10)}.xlsx`); },
     expClassificacao: () => { const wb = workbookParcial(['Classificação', 'Classificação por tribo', 'Série mensal']); if (wb) App.baixarWorkbook(wb, `classificacao-${U.hojeISO().slice(0, 10)}.xlsx`); },
-    expCommits: () => { const rows = App.detalheRows || []; if (!rows.length) return; const ctx = App.ctx; const wb = XLSX.utils.book_new(); const cab = ['Data (GMT)', 'Repositório', 'Pessoa', 'Autor (Usuário)', 'Squad', 'Stack', 'Resumo', 'Horas', 'Horas líquidas', 'Retrabalho', 'Risco', 'Justificativa', 'SHA', 'URL'];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([cab, ...rows.map(r => [U.fmtDataHora(r.data), r.repo, ctx.nomePessoa(r.pessoaId), r.autorUsuario, r.squad, r.stack, r.resumo, r.horas, r.horasLiq, r.retrabalho ? 'sim' : '', r.risco, r.justificativa, r.sha, r.url])]), 'Commits'); App.baixarWorkbook(wb, `commits-${U.hojeISO().slice(0, 10)}.xlsx`); },
+    expCommits: () => { const rows = App.detalheRows || []; if (!rows.length) return; const ctx = App.ctx; const wb = XLSX.utils.book_new(); const cab = ['Data (GMT)', 'Repositório', 'Pessoa', 'Autor (Usuário)', 'Squad', 'Stack', 'Resumo', 'Horas', 'Horas líquidas', 'Retrabalho', 'Risco', 'Justificativa', 'Card citado', 'SHA', 'URL'];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([cab, ...rows.map(r => [U.fmtDataHora(r.data), r.repo, ctx.nomePessoa(r.pessoaId), r.autorUsuario, r.squad, r.stack, r.resumo, r.horas, r.horasLiq, r.retrabalho ? 'sim' : '', r.risco, r.justificativa, r.cards.join(' | '), r.sha, r.url])]), 'Commits');
+      const d = App.detalhe; if (App.ctx.temAtv && d && d.tipo !== 'stack') { const R = recorte(), atv = R.atvUniv.filter(a => Calc.chaveGrupo(a, d.tipo) === d.chave); XLSX.utils.book_append_sheet(wb, sheetAtividades(atv), 'Atividades fora do commit'); }
+      App.baixarWorkbook(wb, `commits-${U.hojeISO().slice(0, 10)}.xlsx`); },
+    expCards: () => { const cds = App.detalheCards; if (!cds || !cds.lista.length) { toast('Nenhum card no recorte.', 'aviso'); return; } const wb = XLSX.utils.book_new();
+      const cab = ['Código', 'Card', 'Tipo', 'Meses', 'Janelas', 'Responsáveis', 'Outros responsáveis (Kanban)', 'Épico', 'Iniciativa', 'Card pai', 'Criado em', 'Criado no mês', 'Commits do recorte citando', 'Descrição (início)', 'ID do card'];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([cab, ...cds.lista.map(c => [c.codigo, c.titulo, c.tipo, c.meses.map(U.fmtMesNum).join(', '), c.janelas.join(', '), c.pessoas.join('; '), c.outros, c.epico, c.iniciativa, c.pai, c.criadoEm ? U.fmtData(c.criadoEm) : '', c.novo ? 'sim' : '', c.commits, c.descricao, c.idCard])]), 'Cards');
+      App.baixarWorkbook(wb, `cards-${U.hojeISO().slice(0, 10)}.xlsx`); },
+    irCards: () => App.irPara('dados', 'cards'),
+    fileCards: el => { const fs = [...el.files]; el.value = ''; if (fs.length) App.importarCards(fs); },
+    removerFonteCards: async el => { if (await App.confirmar('Remover esta carga de cards do Kanban?')) App.removerFonteCards(el.dataset.k); },
+    /* busca e ordenação das tabelas de Commits e Cards: redesenha só a tabela (o campo de busca mantém o foco) */
+    buscaTab: el => { estadoTab(el.dataset.k).q = el.value; App.pag = App.pag || {}; App.pag[el.dataset.k === 'cc-cards' ? 'cards' : 'commits'] = 1; if (el.dataset.k === 'cc-cards') preencherCardsCC(); else preencherCommitsCC(); },
+    ordTab: el => { const st = estadoTab(el.dataset.k), c = el.dataset.c; if (st.col === c) st.dir = -st.dir; else { st.col = c; st.dir = /horas|liq|commits|data|meses/.test(c) ? -1 : 1; } if (el.dataset.k === 'cc-cards') preencherCardsCC(); else preencherCommitsCC(); },
     fileMotor: el => { const fs = [...el.files]; el.value = ''; if (fs.length) App.importarArquivos(fs); }, fileCadastro: el => { const f = el.files[0]; el.value = ''; if (f) App.importarCadastro(f); }, fileBackup: el => { const f = el.files[0]; el.value = ''; if (f) App.importarBackup(f); },
     removerFonte: async el => { if (await App.confirmar('Remover este arquivo e as estimativas que vieram dele?')) App.removerFonte(el.dataset.k); },
     cobIni: el => App.setCobertura(el.dataset.k, el.value, null), cobFim: el => App.setCobertura(el.dataset.k, null, el.value),
@@ -2128,7 +2513,7 @@ const UI = (() => {
     trocarProjeto: el => App.trocarProjeto(el.dataset.k), excluirProjeto: el => App.excluirProjeto(el.dataset.k), exportarBackup: () => App.exportarBackup(),
   };
 
-  return { montar, renderTudo, toast, chartAtivo, workbookRecorte, recorte, linhasTabela, rotuloConfig, paginar, linhasQueCabem, htmlControles, nivelClassificacao, COR, COR_CAT, descMeta, nivelPlano, PAGINAS };
+  return { montar, renderTudo, toast, chartAtivo, workbookRecorte, recorte, linhasTabela, rotuloConfig, paginar, linhasQueCabem, htmlControles, nivelClassificacao, COR, COR_CAT, COR_ATV, descMeta, nivelPlano, PAGINAS, cardsDetalhe };
 })();
 </script>
 <script>'use strict';
@@ -2291,6 +2676,10 @@ está em <recorte>; os insights já gerados, se houver, em <insights_gerados>.
     const valDev = (rows, un) => { const liq = new Map(), devs = new Map(); rows.forEach(r => liq.set(r.ym, (liq.get(r.ym) || 0) + r.horasLiq));
       return y => { if (!devs.has(y)) devs.set(y, Calc.devsDoMes(ctx, rows, un, y, status).size); return { num: liq.get(y) || 0, den: devs.get(y) }; }; };
     const idsGrupo = new Map();
+    // atividades fora do commit por pessoa nos meses completos (h/mês·dev = horas ÷ meses completos ÷ pessoas, como h_mes_dev)
+    const atvP = R.temAtv ? Calc.atvPorGrupo(R.atvUniv.filter(a => status.get(a.ym) === 'completo'), 'autor') : null;
+    const foraDoCommit = gids => { if (!atvP || !R.mesesCompletos || !gids.length) return null; const s = Calc.zeroAtv(); gids.forEach(id => { const a = atvP.get(id); if (a) Calc.TIPOS_ATV.forEach(t => s[t] += a[t]); });
+      const d = R.mesesCompletos * gids.length; return { revisao_h_mes_dev: r1(s.revisao / d), integracao_h_mes_dev: r1(s.integracao / d), reexecucao_ci_h_mes_dev: r1(s.ci / d) }; };
     function grupo(nv, nome, gids) {
       const set = new Set(gids), rows = gids.flatMap(id => rp.get(id) || []), rowsSP = gids.flatMap(id => rpSP.get(id) || []);
       const cl = gids.map(id => [id, R.cls.pessoas.get(id)]).filter(([, c]) => c);
@@ -2316,7 +2705,7 @@ está em <recorte>; os insights já gerados, se houver, em <insights_gerados>.
         risco_alto_pct: rows.length ? r3(rows.filter(r => /^(alto|high)/i.test(r.risco || '')).length / rows.length) : null,
         sem_commits_vigentes: gids.filter(id => !rp.has(id)).length, sem_cadastro: ctx.temCadastro ? gids.filter(id => !(ctx.pessoas.get(id) || {}).cadastrada).length : null,
         stacks_principais: Object.entries(st).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([s, h]) => ({ stack: s, share: liq > 0 ? r3(h / liq) : null })),
-        ganho_conservador_h_mes: r1(cons), ganho_potencial_h_mes: r1(pot), fte_equivalente: reguaMedia ? r1(cons / reguaMedia) : null,
+        ganho_conservador_h_mes: r1(cons), ganho_potencial_h_mes: r1(pot), fte_equivalente: reguaMedia ? r1(cons / reguaMedia) : null, fora_do_commit: foraDoCommit(gids),
         casos_a_investigar: detr.sort((a, b) => a[1].razao - b[1].razao).slice(0, 5).map(([id, c]) => ({ pessoa: pseudo.get(id), h_mes: r1(c.valor), razao_regua: r3(c.razao) })) };
     }
     // nível analisado (o mesmo do gráfico de classificação) e o nível logo abaixo, se houver no cadastro
@@ -2332,6 +2721,7 @@ está em <recorte>; os insights já gerados, se houver, em <insights_gerados>.
     const serie = Calc.serieMensalDevs(ctx, R.rowsUniv, univ, meses, status, lim, R.rg);
     const comp = serie.filter(x => status.get(x.ym) === 'completo'), devMes = comp.reduce((a, x) => a + x.devs, 0);
     const vt = Calc.variacao(valDev(R.rowsUnivSP, univ), f.mesIni, f.mesFim, status, R.janela), eU = Calc.estat(ids.map(id => R.prod.valores.get(id) || 0));
+    const atvU = Calc.somaAtv(R.atvUniv);
     const nvPl = UI.nivelPlano(R), perim = Calc.planoMeta(ctx, R.rowsUniv, univ, meses, status, lim, R.attrs, R.cls, null)[0];
     const plano = nvPl ? Calc.planoMeta(ctx, R.rowsUniv, univ, meses, status, lim, R.attrs, R.cls, nvPl) : [];
     const payload = {
@@ -2343,7 +2733,10 @@ está em <recorte>; os insights já gerados, se houver, em <insights_gerados>.
         variacao: { janela: R.janela, atual: r1(vt.atual), anterior: r1(vt.anterior), variacao: r3(vt.variacao), motivo: vt.motivo || undefined },
         referencia_universo: { mediana_h_mes: r1(eU.mediana), p25: r1(eU.p25), p75: r1(eU.p75) }, meta_h_mes_dev: r1(perim && perim.meta) },
       serie_mensal: serie.map(x => ({ mes: x.ym, cobertura: status.get(x.ym) || 'sem-dados', h_mes_dev: r1(x.horasPorDev), devs: x.devs, detratores: x.detrator, neutros: x.neutro, impulsionadores: x.impulsionador, sem_regua: x.semRegua })),
-      grupos, fluxo_mr: null, revisoes: null,
+      grupos, fluxo_mr: null,
+      revisoes: R.temAtv ? { descricao: 'atividades fora do commit estimadas pelo motor por MR (não entram em h_mes_dev, régua nem classificação)',
+        horas_revisao: r1(atvU.revisao), horas_integracao: r1(atvU.integracao), horas_reexecucao_ci: r1(atvU.ci), eventos: atvU.eventos,
+        horas_commits: r1(Calc.somaLiq(R.rowsUniv)), ...(foraDoCommit(ids) || {}) } : null,
       plano_meta: { nivel: nvPl || 'universo', meta_h_mes_dev: r1(perim && perim.meta), realizado_h_mes_dev: r1(perim && perim.atual), gap_h_mes_dev: r1(perim && perim.gap), horas_para_meta_h_mes: r1(perim && perim.horasParaMeta),
         grupos: plano.slice(0, 40).map(g => ({ nome: g.nome || `(sem ${nvPl})`, tribo: g.tribo, devs_mes: r1(g.devsMes), realizado_h_mes_dev: r1(g.atual), meta_h_mes_dev: r1(g.meta), gap_h_mes_dev: r1(g.gap), pct_meta: r3(g.pctMeta), horas_para_meta_h_mes: r1(g.horasParaMeta), detratores: g.detrator })) },
       qualidade_dados: { cadastro_carregado: ctx.temCadastro, pessoas_sem_cadastro: ctx.temCadastro ? ids.filter(id => !(ctx.pessoas.get(id) || {}).cadastrada).length : null,
@@ -2359,7 +2752,7 @@ está em <recorte>; os insights já gerados, se houver, em <insights_gerados>.
 Observações da aplicação:
 - ganho_conservador_h_mes, ganho_potencial_h_mes e fte_equivalente de cada grupo já foram calculados pela aplicação com as fórmulas da instrução; use-os em vez de recalcular. Os grupos de níveis diferentes se sobrepõem (um squad está contido na sua tribo ou empresa): não some ganhos entre eles no resumo.
 - Em "metricas", copie os valores exatamente como estão na entrada, sem calcular diferenças. A aplicação confere cada valor (e os números do texto) e descarta o insight com valor ausente.
-- "fluxo_mr" e "revisoes" são nulos: os dados atuais só têm commits.
+${payload.revisoes ? `- "fluxo_mr" é nulo. "revisoes" traz as horas estimadas de revisão, integração e reexecução de CI (atividades fora do commit), e cada grupo traz fora_do_commit em h/mês·dev: são capacidade alocada fora dos commits (regra H), não entram em h_mes_dev, na régua nem na classificação.` : '- "fluxo_mr" e "revisoes" são nulos: os dados atuais só têm commits.'}
 - A meta (régua) de cada dev é um percentil da produtividade da tribo dele (descrito no campo meta.meta), definido por mês e igual em todo o relatório. plano_meta traz, por grupo, o realizado e a meta em h/mês·dev e as horas por mês que faltam para a meta; use-o em acoes_por_grupo.
 - Proporções (campos _pct, share, variacao, razao_regua, limiares) estão em fração decimal: 0,12 = 12%.
 - h_mes_dev de um grupo é a média da produtividade das pessoas do grupo (h/mês); nos totais e na série mensal é horas do mês ÷ desenvolvedores do mês.
@@ -2593,18 +2986,22 @@ ${JSON.stringify(payload, null, 1)}
       <button class="btn s xs" data-click="ia" data-op="exportarPlano" ${plano.length ? '' : 'disabled'}>Exportar Excel</button>`;
     const corpo = !plano.length ? `<div class="empty"><p>Sem ${rot.toLowerCase()} nos dados cadastrais: importe o cadastro para ver o plano por grupo.</p></div>`
       : `<div class="pl-grid"><div class="fill-col"><div class="ia-rot">Horas por mês para chegar à meta · ${rotPl} abaixo</div><div class="chart-wrap fill"><canvas id="ia-graf-plano" role="img" aria-label="Horas por mês que faltam para a meta, por ${rot.toLowerCase()}"></canvas></div></div>
-        <div class="fill-col"><div class="tbl-wrap fill" id="pl-wrap" style="overflow:auto">${tabelaPlano(plano, nivel, rot, acoes, !!r)}</div></div></div>`;
+        <div class="fill-col"><div class="tbl-wrap fill" id="pl-wrap" style="overflow:auto">${tabelaPlano(plano, nivel, rot, acoes, !!r, R)}</div></div></div>`;
     return `${kpis}<div class="card fill"><div class="card-hdr"><div><div class="card-title">${esc(titulo)}</div><div class="card-sub">meta de cada dev = meta da tribo dele (${esc(UI.descMeta(R))}) · meses completos · clique no nome para detalhar</div></div><div class="card-tools">${tools}</div></div><div class="card-body">${corpo}</div></div>`;
   }
-  function tabelaPlano(plano, nivel, rot, acoes, temIA) {
+  function tabelaPlano(plano, nivel, rot, acoes, temIA, R) {
     const f1 = v => U.ok(v) ? U.fmtNum(v, 1) : '—', nomeG = g => g.nome || `Sem ${rot.toLowerCase()}`;
+    // atividades fora do commit do grupo nos meses completos ÷ desenvolvedores-mês (mesma base do realizado); fora do cálculo da meta
+    const atvP = R && R.temAtv ? Calc.atvPorGrupo(R.atvUniv.filter(a => R.status.get(a.ym) === 'completo'), 'autor') : null;
+    const tdAtv = g => !atvP ? '' : Calc.TIPOS_ATV.map(t => { const h = (g.ids || []).reduce((s, id) => s + ((atvP.get(id) || {})[t] || 0), 0); return `<td class="num">${g.devMes ? f1(h / g.devMes) : '—'}</td>`; }).join('');
+    const thAtv = !atvP ? '' : Calc.TIPOS_ATV.map(t => `<th class="num" title="${esc(Calc.ROTULO_ATV[t])} (fora do commit), h/mês·dev nos meses completos; não entra na meta">${esc(Calc.ROTULO_ATV_CURTO[t])}</th>`).join('');
     const linhas = plano.map(g => { const a = acoes.get(g.nome || `(sem ${nivel})`), pct = g.pctMeta, naMeta = g.horasParaMeta <= 0;
       return `<tr><td><a href="#" data-click="detalhe" data-tipo="${nivel}" data-k="${esc(g.nome || '(sem)')}" title="Abrir o detalhamento">${esc(nomeG(g))}</a></td>${nivel === 'squad' ? `<td>${esc(g.tribo || '—')}</td>` : ''}
-        <td class="num">${f1(g.devsMes)}</td><td class="num">${f1(g.atual)}</td><td class="num">${f1(g.meta)}</td>
+        <td class="num">${f1(g.devsMes)}</td><td class="num">${f1(g.atual)}</td>${tdAtv(g)}<td class="num">${f1(g.meta)}</td>
         <td><div class="ia-bar"><i><span style="width:${U.ok(pct) ? Math.min(100, pct * 100) : 0}%;background:var(${naMeta ? '--ok' : '--primary'})"></span></i><b>${U.ok(pct) ? U.fmtPct(pct, 0) : '—'}</b></div></td>
         <td class="num">${g.gap > 0 ? '+' + f1(g.gap) : '—'}</td><td class="num"><b>${g.horasParaMeta > 0 ? U.fmtInt(g.horasParaMeta) : '—'}</b></td><td class="num">${U.fmtInt(g.detrator)}</td>
         <td class="pl-acao">${naMeta ? '<span class="pos">na meta</span>' : a ? `${esc(a.acao)} <span class="mini">· ${esc(a.dono)}</span>` : `<span class="nc">${temIA ? 'sem sugestão' : 'use ✦ Sugerir ações'}</span>`}</td></tr>`; }).join('');
-    return `<table class="tbl compacta ia-int" id="pl-tab"><thead><tr><th>${esc(rot)}</th>${nivel === 'squad' ? '<th>Tribo</th>' : ''}<th class="num" title="desenvolvedores por mês, média dos meses completos">Devs/mês</th><th class="num" title="h/mês·dev nos meses completos">Realizado</th><th class="num" title="média da meta de cada dev, ponderada por dev-mês">Meta</th><th>% da meta</th><th class="num" title="meta − realizado, em h/mês por dev">Falta/dev</th><th class="num" title="falta por dev × devs por mês">Horas/mês p/ meta</th><th class="num">Detratores</th><th>Ação sugerida</th></tr></thead><tbody>${linhas}</tbody></table>`;
+    return `<table class="tbl compacta ia-int" id="pl-tab"><thead><tr><th>${esc(rot)}</th>${nivel === 'squad' ? '<th>Tribo</th>' : ''}<th class="num" title="desenvolvedores por mês, média dos meses completos">Devs/mês</th><th class="num" title="h/mês·dev nos meses completos">Realizado</th>${thAtv}<th class="num" title="média da meta de cada dev, ponderada por dev-mês">Meta</th><th>% da meta</th><th class="num" title="meta − realizado, em h/mês por dev">Falta/dev</th><th class="num" title="falta por dev × devs por mês">Horas/mês p/ meta</th><th class="num">Detratores</th><th>Ação sugerida</th></tr></thead><tbody>${linhas}</tbody></table>`;
   }
   const rotuloValor = { id: 'rotuloValor', afterDatasetsDraw(c) { const { ctx } = c, m = c.getDatasetMeta(0); ctx.save(); ctx.font = '600 11px Segoe UI, sans-serif'; ctx.fillStyle = UI.COR.escuro; ctx.textBaseline = 'middle';
     m.data.forEach((el, i) => { const v = c.data.datasets[0].data[i]; if (v !== null && v !== undefined) ctx.fillText(U.fmtInt(v), el.x + 4, el.y); }); ctx.restore(); } };
@@ -2617,12 +3014,14 @@ ${JSON.stringify(payload, null, 1)}
   }
   function exportarPlano() {
     const X = recorteIA(), R = X.R, { nivel, perim, plano } = dadosPlano(X), rot = nivel ? Calc.ROTULO_CRIT[nivel] : 'Grupo', r = resultadoPara(X.assinatura), acoes = new Map(((r && r.acoes) || []).map(a => [a.grupo, a]));
-    const cab = [rot, 'Tribo', 'Devs/mês', 'Realizado (h/mês·dev)', 'Meta (h/mês·dev)', '% da meta', 'Falta por dev (h/mês)', 'Horas/mês para a meta', 'Detratores', 'Ação sugerida (IA)', 'Dono'];
+    const atvP = R.temAtv ? Calc.atvPorGrupo(R.atvUniv.filter(a => R.status.get(a.ym) === 'completo'), 'autor') : null;
+    const cabA = atvP ? Calc.TIPOS_ATV.map(t => `${Calc.ROTULO_ATV[t]} (h/mês·dev)`) : [], vA = g => !atvP ? [] : Calc.TIPOS_ATV.map(t => g.devMes ? U.round(g.ids.reduce((s, id) => s + ((atvP.get(id) || {})[t] || 0), 0) / g.devMes) : null);
+    const cab = [rot, 'Tribo', 'Devs/mês', 'Realizado (h/mês·dev)', ...cabA, 'Meta (h/mês·dev)', '% da meta', 'Falta por dev (h/mês)', 'Horas/mês para a meta', 'Detratores', 'Ação sugerida (IA)', 'Dono'];
     const wb = XLSX.utils.book_new(), n = v => U.ok(v) ? U.round(v) : null;
     const ws0 = XLSX.utils.aoa_to_sheet([['Plano para a meta — Análise de desenvolvimento'], [], ['Projeto', App.projeto.nome], ['Recorte', X.desc], ['Meta', UI.descMeta(R)], ['Meta do perímetro (h/mês·dev)', n(perim.meta)], ['Realizado (h/mês·dev)', n(perim.atual)],
       ['Horas/mês para a meta (perímetro)', n(perim.horasParaMeta)], ['Exportado em', U.fmtDataHora(U.hojeISO())], ['Dados demonstrativos', App.projeto.fontes.some(f => f.demo) ? 'SIM — dados sintéticos' : 'não']]);
     ws0['!cols'] = [{ wch: 34 }, { wch: 90 }]; XLSX.utils.book_append_sheet(wb, ws0, 'Resumo');
-    const ws1 = XLSX.utils.aoa_to_sheet([cab, ...plano.map(g => { const a = acoes.get(g.nome || `(sem ${nivel})`); return [g.nome || `Sem ${rot.toLowerCase()}`, g.tribo, U.round(g.devsMes, 1), n(g.atual), n(g.meta), U.ok(g.pctMeta) ? U.round(g.pctMeta, 4) : null, g.gap > 0 ? n(g.gap) : null, Math.round(g.horasParaMeta), g.detrator, a ? a.acao : '', a ? a.dono : '']; })]);
+    const ws1 = XLSX.utils.aoa_to_sheet([cab, ...plano.map(g => { const a = acoes.get(g.nome || `(sem ${nivel})`); return [g.nome || `Sem ${rot.toLowerCase()}`, g.tribo, U.round(g.devsMes, 1), n(g.atual), ...vA(g), n(g.meta), U.ok(g.pctMeta) ? U.round(g.pctMeta, 4) : null, g.gap > 0 ? n(g.gap) : null, Math.round(g.horasParaMeta), g.detrator, a ? a.acao : '', a ? a.dono : '']; })]);
     ws1['!cols'] = cab.map(c => ({ wch: Math.max(12, c.length + 2) })); XLSX.utils.book_append_sheet(wb, ws1, 'Plano da meta');
     App.baixarWorkbook(wb, `plano-meta-${U.hojeISO().slice(0, 10)}.xlsx`);
   }
@@ -2939,6 +3338,20 @@ const App = (() => {
     f.cobertura = { inicio: a, fim: b, editada: true }; return atualizar();
   }
   function setConfigAtiva(key) { A.projeto.configAtiva = key; return atualizar(); }
+
+  // ── cards do Kanban ──────────────────────────────────────────────────────
+  async function importarCards(arquivos) {
+    const msgs = [];
+    for (const f of arquivos) {
+      const L = Importador.lerCards(f.conteudo !== undefined ? f.conteudo : await lerFile(f), f.name);
+      if (L.erros && L.erros.length) { msgs.push([`${f.name}: ${L.erros[0]}`, 'erro', 0]); continue; }
+      const r = Importador.mesclarCards(A.projeto, L);
+      msgs.push([`${f.name}: ${U.fmtInt(L.fonte.cards)} cards (${U.fmtInt(r.novos)} linha(s) nova(s), ${U.fmtInt(r.atualizados)} atualizada(s))${L.fonte.commitsCitando ? ` · ${U.fmtInt(L.fonte.commitsCitando)} commits citando card` : ''}.`, 'ok', 6000]);
+    }
+    await atualizar({ imediato: true });
+    msgs.forEach(m => UI.toast(...m));
+  }
+  function removerFonteCards(id) { Importador.removerFonteCards(A.projeto, id); return atualizar({ imediato: true }); }
 
   // ── dados cadastrais ─────────────────────────────────────────────────────
   async function importarCadastro(file) {
@@ -3278,7 +3691,7 @@ const App = (() => {
   }
 
   A.confirmar = msg => Promise.resolve(window.confirm(msg));
-  return Object.assign(A, { init, recalcular, atualizar, salvar, importarArquivos, carregarDemo, carregarDemoCadastro, limparDemo, removerFonte, setCobertura,
+  return Object.assign(A, { init, recalcular, atualizar, salvar, importarArquivos, importarCards, removerFonteCards, carregarDemo, carregarDemoCadastro, limparDemo, removerFonte, setCobertura,
     setConfigAtiva, importarCadastro, setCadastro, limparCadastro, setParametros, setCabecalho, setAnalise, setFiltros, limparFiltros, setModo,
     setCriterio, abrirDetalhe, irPara, irPagina, novoProjeto, trocarProjeto, excluirProjeto, renomearProjeto, exportarBackup, importarBackup, baixar, baixarWorkbook,
     baixarModeloCadastro, baixarCadastros, exportarRecorte, baixarExemplo, estadoResumido, testesAceite });
