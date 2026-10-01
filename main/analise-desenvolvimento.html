@@ -333,10 +333,15 @@ th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--text)}
 .kpi-label{flex-wrap:wrap;row-gap:4px}.kpi-label .seg{flex:none}
 .metas-pct{display:inline-flex;align-items:center;gap:6px;margin-left:6px}
 .pl-grid{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.7fr);gap:16px}.pl-grid>*{min-height:0}
-/* Detalhamento › Commits e Cards: gráfico à esquerda, commits e cards empilhados à direita */
-.cc-grid{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.45fr);gap:12px}.cc-grid>*{min-height:0}
-.cc-grid .card-hdr .legend{margin:0}.cc-tabs .tbl td{max-width:220px}.cc-tabs .tbl td.wrap{max-width:300px}
-.cc-tabs{min-height:0;display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:12px}.cc-tabs>*{min-height:0}
+/* Detalhamento › Commits e Cards: faixa do gráfico no topo, commits e cards lado a lado (50/50) embaixo */
+.cc-faixa{flex:none}.cc-faixa .card-hdr{align-items:center}.cc-faixa .card-hdr>.card-tools{flex:0 1 auto;min-width:0}.cc-faixa .card-hdr .legend{margin:0;justify-content:flex-end}
+.cc-faixa .card-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cc-faixa .card-body{padding-top:6px;padding-bottom:10px}
+/* a faixa cede altura antes das tabelas: 230 px a partir de ~930 px de janela, 130 px em telas de 768 px */
+.cc-faixa .chart-wrap{height:clamp(130px,calc(100vh - 700px),230px)}
+.cc-tabs{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr);gap:12px}.cc-tabs>*{min-height:0}
+@media(max-width:960px){.cc-tabs{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,1fr)}}
+/* larguras fixas: o que sobra vai para Resumo / Card; texto longo cortado com "…" (completo no tooltip) */
+.tbl.cc-tbl{table-layout:fixed}.tbl.cc-tbl th,.tbl.cc-tbl td,.tbl.cc-tbl td:first-child{max-width:none;overflow:hidden;text-overflow:ellipsis}
 .cc-busca{margin:0;width:180px}
 .tbl td.pl-acao{white-space:normal;max-width:340px;min-width:200px;line-height:1.35;padding-top:4px;padding-bottom:4px}
 #pl-tab td{height:36px}#pl-tab a{color:var(--text-strong);text-decoration:none;font-weight:600}#pl-tab a:hover{color:var(--primary);text-decoration:underline}
@@ -1491,11 +1496,11 @@ const UI = (() => {
   const PALETAS = {
     light: { cor: { primaria: '#296DB7', destaque: '#E68E18', media: '#306F9F', neutra: '#9DB1CF', clara: '#D3DEEC', grade: 'rgba(16,24,40,.06)', texto: '#56667D', escuro: '#0F1B33', fundo: '#FFFFFF', rotulo: 'rgba(255,255,255,.9)', tooltip: '#0F1B33' },
       cat: { detrator: '#D0584A', neutro: '#B9C6D8', impulsionador: '#2E9E62' },
-      // empilhadas sobre os commits (primaria): ordem e tons conferidos no validador de paleta, claro e escuro
-      atv: { revisao: '#1BAF7A', integracao: '#4A3AA7', ci: '#E87BA4' } },
+      // atividades de suporte empilhadas sobre os commits (primaria): cinzas, para o azul dos commits — a medida da meta — dominar
+      atv: { revisao: '#6B7684', integracao: '#98A2AE', ci: '#C3C9D1' } },
     dark: { cor: { primaria: '#4C8FDB', destaque: '#F0A040', media: '#5B9BE6', neutra: '#5D6B82', clara: '#34425A', grade: 'rgba(255,255,255,.07)', texto: '#A2AFC2', escuro: '#F3F6FB', fundo: '#151D2A', rotulo: 'rgba(21,29,42,.9)', tooltip: '#2C394D' },
       cat: { detrator: '#E0685A', neutro: '#5D6B82', impulsionador: '#3DB277' },
-      atv: { revisao: '#199E70', integracao: '#9085E9', ci: '#D55181' } },
+      atv: { revisao: '#8792A3', integracao: '#6A7588', ci: '#505B6E' } },
   };
   const COR = {}, COR_CAT = {}, COR_ATV = {};
   const CHAVE_TEMA = 'gradus-analise-tema';
@@ -1590,12 +1595,13 @@ const UI = (() => {
   } };
 
   /* plugin: rótulo acima de cada barra: "valor h (variação % vs. barra anterior)"; em barras empilhadas (datasets com
-     _pilha), o valor é o total da pilha e o rótulo fica sobre o segmento mais alto */
+     _pilha), o rótulo fica sobre o segmento mais alto, mas o valor é só o dos commits (_medida): a medida da meta */
   const rotulosBarra = { id: 'rotulosBarra', afterDatasetsDraw(c) {
     const { ctx } = c, idx = c.data.datasets.map((d, i) => i).filter(i => c.data.datasets[i]._pilha && !c.getDatasetMeta(i).hidden);
     const dsIdx = idx.length ? idx : (c.data.datasets[0] && !c.getDatasetMeta(0).hidden ? [0] : []); if (!dsIdx.length) return;
+    const medIdx = dsIdx.filter(d => c.data.datasets[d]._medida), valIdx = medIdx.length ? medIdx : dsIdx;
     const n = c.data.labels.length, tot = [];
-    for (let i = 0; i < n; i++) { const vs = dsIdx.map(d => c.data.datasets[d].data[i]); tot.push(vs.every(v => v === null || v === undefined) ? null : vs.reduce((a, v) => a + (v || 0), 0)); }
+    for (let i = 0; i < n; i++) { const vs = valIdx.map(d => c.data.datasets[d].data[i]); tot.push(vs.every(v => v === null || v === undefined) ? null : vs.reduce((a, v) => a + (v || 0), 0)); }
     for (let i = 0; i < n; i++) { const v = tot[i]; if (v === null) continue; const ant = i > 0 ? tot[i - 1] : null;
       const els = dsIdx.map(d => c.getDatasetMeta(d).data[i]).filter(Boolean); if (!els.length) continue;
       const x = els[0].x, y = Math.min(...els.map(e => e.y));
@@ -1611,10 +1617,17 @@ const UI = (() => {
     const base = { borderSkipped: 'bottom', barPercentage: 0.66, categoryPercentage: 0.8, order: 1, ...extra };
     if (!comAtv) return [{ label: extra.label || 'Horas', data: valores.map(v => v.commits), backgroundColor: corCommits, borderRadius: 3, ...base }];
     const seg = { borderWidth: 1, borderColor: COR.fundo, stack: 'h', _pilha: true };
-    return [{ label: 'Commits', data: valores.map(v => v.commits), backgroundColor: corCommits, ...base, ...seg },
-      ...Calc.TIPOS_ATV.map(t => ({ label: Calc.ROTULO_ATV[t], data: valores.map(v => v.commits === null && !v[t] ? null : U.round(v[t] || 0, 2)), backgroundColor: COR_ATV[t], ...base, ...seg }))];
+    return [{ label: 'Commits', data: valores.map(v => v.commits), backgroundColor: corCommits, ...base, ...seg, _medida: true },
+      ...Calc.TIPOS_ATV.map(t => ({ label: Calc.ROTULO_ATV[t], data: valores.map(v => v.commits === null && !v[t] ? null : U.round(v[t] || 0, 2)), backgroundColor: COR_ATV[t], ...base, ...seg, _suporte: true }))];
   }
-  const legAtv = () => Calc.TIPOS_ATV.map(t => `<div class="ld"><div class="ldot" style="background:${COR_ATV[t]}"></div>${esc(Calc.ROTULO_ATV[t].toLowerCase())}</div>`).join('');
+  /* legenda das barras de horas: commits (a medida) em destaque; atividades de suporte agrupadas, em cinza */
+  const legHoras = (rotCommits, comAtv) => `<div class="ld"><div class="ldot" style="background:${COR.primaria}"></div><b>${esc(rotCommits)}</b></div>`
+    + (comAtv ? `<div class="ld mini">suporte, fora da meta:</div>` + Calc.TIPOS_ATV.map(t => `<div class="ld"><div class="ldot" style="background:${COR_ATV[t]}"></div>${esc(Calc.ROTULO_ATV[t].toLowerCase().replace(/ ci$/, ' CI'))}</div>`).join('') : '');
+  /* rodapé do tooltip das barras empilhadas: suporte e total da pilha (o rótulo da barra mostra só os commits) */
+  const rodapeSuporte = un => items => {
+    const soma = f => items.filter(i => f(i.dataset)).reduce((a, i) => a + (i.raw || 0), 0), sup = soma(d => d._suporte);
+    return sup ? `suporte: ${U.fmtH(sup)}${un} · total com suporte: ${U.fmtH(sup + soma(d => d._medida))}${un}` : '';
+  };
   /* texto curto das atividades fora do commit de um conjunto: "rev. 12,3 h · int. 4,0 h · CI 0,3 h" */
   const txtAtv = (s, div = 1, un = ' h') => Calc.TIPOS_ATV.map(t => `${Calc.ROTULO_ATV_CURTO[t].toLowerCase().replace('ci', 'CI')} ${U.fmtNum((s[t] || 0) / div, 1)}${un}`).join(' · ');
 
@@ -1868,16 +1881,17 @@ const UI = (() => {
     if (modo === 'horas') {
       sub.textContent = `horas estimadas líquidas por desenvolvedor no mês (horas do mês ÷ desenvolvedores do mês) · meta = média da meta de cada dev do mês (${descMeta(R)})` + notaParcial;
       const comAtv = R.temAtv, am = comAtv ? Calc.atvPorMes(atvRows || R.atv) : null;
-      if (comAtv) sub.textContent += ' · barras empilhadas: horas de commits + atividades fora do commit (revisão, integração, reexecução de CI) ÷ os mesmos desenvolvedores; rótulo = total; a meta compara só as horas de commits';
-      leg.innerHTML = `<div class="ld"><div class="ldot" style="background:${COR.primaria}"></div>${comAtv ? 'commits (horas líquidas)' : 'horas líquidas por desenvolvedor'}</div>${comAtv ? legAtv() : ''}<div class="ld"><div class="ldot line" style="background:${COR.destaque}"></div>meta de produtividade</div>` + legTab;
+      if (comAtv) sub.textContent += ' · rótulo e meta = só commits; suporte em cinza (÷ os mesmos devs), total no tooltip';
+      leg.innerHTML = legHoras(comAtv ? 'commits · hora produtiva' : 'horas líquidas por desenvolvedor', comAtv) + `<div class="ld"><div class="ldot line" style="background:${COR.destaque}"></div>meta de produtividade${comAtv ? ' (só commits)' : ''}</div>` + legTab;
       const linhaMeta = { type: 'line', label: 'Meta', stack: 'meta', data: s.map(x => U.ok(x.meta) ? U.round(x.meta, 2) : null), borderColor: COR.destaque, backgroundColor: COR.destaque, borderWidth: 2, borderDash: [6, 4], pointRadius: 3, pointHoverRadius: 5, tension: 0, order: 0 };
       const vals = s.map(x => { const v = { commits: x.horasPorDev === null ? null : U.round(x.horasPorDev, 2) }, a = am && am.get(x.ym); Calc.TIPOS_ATV.forEach(t => v[t] = a && x.devs ? a[t] / x.devs : 0); return v; });
       const barras = datasetsHoras(vals, meses.map(y => status.get(y) === 'completo' ? COR.primaria : COR.clara), comAtv, { label: 'Horas por desenvolvedor' });
       const esc2 = escalas(); if (comAtv) { esc2.x.stacked = true; esc2.y.stacked = true; }
-      chart(ids.barras, { type: 'bar', plugins: [rotulosBarra, tabelaEixo(tabela)], data: { labels: rotulos, datasets: [...barras, linhaMeta] },
-        options: opts(v => U.fmtNum(v, 0), c => c.dataset.label === 'Meta' ? `Meta: ${U.fmtNum(c.raw, 1)} h/mês·dev`
-          : comAtv ? (c.dataset.label === 'Commits' ? `Commits: ${U.fmtH(c.raw)} por dev · ${U.fmtH(s[c.dataIndex].liq)} no total · ${U.fmtInt(s[c.dataIndex].devs)} devs` : `${c.dataset.label}: ${U.fmtH(c.raw)} por dev`)
-          : `${U.fmtH(c.raw)} por desenvolvedor · ${U.fmtH(s[c.dataIndex].liq)} no total · ${U.fmtInt(s[c.dataIndex].devs)} devs`, { scales: esc2, layout }) });
+      const o = opts(v => U.fmtNum(v, 0), c => c.dataset.label === 'Meta' ? `Meta: ${U.fmtNum(c.raw, 1)} h/mês·dev (compara só commits)`
+          : comAtv ? (c.dataset.label === 'Commits' ? `Commits: ${U.fmtH(c.raw)} por dev · ${U.fmtH(s[c.dataIndex].liq)} no total · ${U.fmtInt(s[c.dataIndex].devs)} devs` : `${c.dataset.label} (suporte): ${U.fmtH(c.raw)} por dev`)
+          : `${U.fmtH(c.raw)} por desenvolvedor · ${U.fmtH(s[c.dataIndex].liq)} no total · ${U.fmtInt(s[c.dataIndex].devs)} devs`, { scales: esc2, layout });
+      if (comAtv) o.plugins.tooltip.callbacks.footer = rodapeSuporte(' por dev');
+      chart(ids.barras, { type: 'bar', plugins: [rotulosBarra, tabelaEixo(tabela)], data: { labels: rotulos, datasets: [...barras, linhaMeta] }, options: o });
     } else {
       sub.textContent = `desenvolvedores por categoria em cada mês: horas da pessoa no mês ÷ meta da tribo dela no mês (${descMeta(R)}) · ${descLim(R)} · meses parciais ficam sem meta · rótulo = desenvolvedores (% do mês)` + notaParcial;
       leg.innerHTML = Calc.CATEGORIAS.map(c => `<div class="ld"><div class="ldot" style="background:${COR_CAT[c]}"></div>${Calc.ROTULO_CAT[c].toLowerCase()}</div>`).join('') + (s.some(x => x.semRegua) ? `<div class="ld"><div class="ldot" style="background:${COR.clara}"></div>sem meta</div>` : '') + legTab;
@@ -2060,14 +2074,13 @@ const UI = (() => {
       const cds = cardsDetalhe(R, tipo, chave, rows), st = estadoTab('cc-commits'), sk = estadoTab('cc-cards');
       App.detalheCards = cds;
       const busca = (k, s, ph) => `<input type="search" class="ia-filtro-tab cc-busca" data-input="buscaTab" data-k="${k}" value="${esc(s.q)}" placeholder="${ph}" aria-label="${ph}">`;
-      corpo = cabecalho + `<div class="cc-grid">
-        <div class="card fill"><div class="card-hdr"><div><div class="card-title">Horas por mês</div><div class="card-sub" id="cc-sub"></div></div></div>
-          <div class="card-body"><div class="legend" id="cc-leg"></div><div class="chart-wrap fill"><canvas id="cc-horas" role="img" aria-label="Horas por mês"></canvas></div></div></div>
+      corpo = cabecalho + `<div class="card cc-faixa"><div class="card-hdr"><div><div class="card-title">Horas por mês</div><div class="card-sub" id="cc-sub"></div></div><div class="card-tools"><div class="legend" id="cc-leg"></div></div></div>
+          <div class="card-body"><div class="chart-wrap"><canvas id="cc-horas" role="img" aria-label="Horas por mês"></canvas></div></div></div>
         <div class="cc-tabs">
           <div class="card fill"><div class="card-hdr"><div><div class="card-title">Commits do recorte</div><div class="card-sub">${U.fmtInt(rows.length)} commits · ${U.fmtH(liq)} líquidas${R.ctx.temCards ? ` · ${U.fmtInt(rows.filter(r => r.cards.length).length)} citando card` : ''}</div></div><div class="card-tools">${busca('cc-commits', st, 'Filtrar commits…')}<button class="btn s xs" data-click="expCommits">Exportar commits</button></div></div>
             <div class="card-body"><div class="tbl-wrap fill" id="det-aud-wrap"></div><div class="pag-slot" id="det-aud-pag"></div></div></div>
           <div class="card fill"><div class="card-hdr"><div><div class="card-title">Cards movimentados</div><div class="card-sub" title="${esc(cds.criterio)}">${R.ctx.temCards ? `${U.fmtInt(cds.length)} card(s) · ${esc(cds.criterioCurto)}` : 'sem base de cards'}</div></div><div class="card-tools">${R.ctx.temCards ? busca('cc-cards', sk, 'Filtrar cards…') + '<button class="btn s xs" data-click="expCards">Exportar cards</button>' : '<button class="btn o xs" data-click="irCards">Importar cards</button>'}</div></div>
-            <div class="card-body"><div class="tbl-wrap fill" id="det-cards-wrap"></div><div class="pag-slot" id="det-cards-pag"></div></div></div></div></div>`;
+            <div class="card-body"><div class="tbl-wrap fill" id="det-cards-wrap"></div><div class="pag-slot" id="det-cards-pag"></div></div></div></div>`;
     }
     sec.innerHTML = `<div class="pagina">${seletor}${corpo}</div>`;
     App.detalheRows = rows;
@@ -2098,12 +2111,14 @@ const UI = (() => {
     const vals = s.map(x => { const v = { commits: U.round(x.liq, 2) }, a = am && am.get(x.ym); Calc.TIPOS_ATV.forEach(t => v[t] = a ? a[t] : 0); return v; });
     const tabela = [['Commits', s.map(x => x.commits), v => U.fmtInt(v)]];
     if (cards && R.ctx.temCards) { const pm = new Map(); cards.lista.forEach(c => c.meses.forEach(m => pm.set(m, (pm.get(m) || 0) + 1))); tabela.push(['Cards', meses.map(y => pm.get(y) || 0), v => U.fmtInt(v)]); }
-    U.el(ids.sub).textContent = `horas estimadas líquidas por mês${R.temAtv ? ' · empilhadas: commits + revisão, integração e reexecução de CI (fora do commit) · rótulo = total' : ''} · * cobertura parcial${tabela.length > 1 ? ' · abaixo do eixo: commits e cards movimentados no mês' : ' · abaixo do eixo: commits no mês'}`;
-    U.el(ids.leg).innerHTML = `<div class="ld"><div class="ldot" style="background:${COR.primaria}"></div>${R.temAtv ? 'commits (horas líquidas)' : 'horas líquidas'}</div>${R.temAtv ? legAtv() : ''}`;
+    U.el(ids.sub).textContent = `horas estimadas líquidas por mês${R.temAtv ? ' · rótulo = só commits; suporte em cinza, total no tooltip' : ''} · * cobertura parcial${tabela.length > 1 ? ' · abaixo do eixo: commits e cards movimentados no mês' : ' · abaixo do eixo: commits no mês'}`;
+    U.el(ids.sub).title = U.el(ids.sub).textContent;
+    U.el(ids.leg).innerHTML = legHoras(R.temAtv ? 'commits · hora produtiva' : 'horas líquidas', R.temAtv);
     const esc2 = { x: { stacked: R.temAtv, grid: { display: false }, border: { display: false }, ticks: { padding: 6 } }, y: { stacked: R.temAtv, beginAtZero: true, grid: { color: COR.grade, drawTicks: false }, border: { display: false }, ticks: { padding: 6, callback: v => U.fmtNum(v, 0) } } };
-    chart(ids.canvas, { type: 'bar', plugins: [rotulosBarra, tabelaEixo(tabela)], data: { labels: rot, datasets: datasetsHoras(vals, meses.map(y => status.get(y) === 'completo' ? COR.primaria : COR.clara), R.temAtv, { label: 'Horas líquidas' }) },
-      options: opts(v => U.fmtNum(v, 0), c => R.temAtv ? `${c.dataset.label}: ${U.fmtH(c.raw)}${c.dataset.label === 'Commits' ? ` · ${U.fmtInt(s[c.dataIndex].commits)} commits` : ''}` : `${U.fmtH(c.raw)} · ${U.fmtInt(s[c.dataIndex].commits)} commits`,
-        { scales: esc2, layout: { padding: { top: 16, left: 66, bottom: tabela.length * 18 + 4 } } }) });
+    const o = opts(v => U.fmtNum(v, 0), c => R.temAtv ? `${c.dataset.label}${c.dataset._suporte ? ' (suporte)' : ''}: ${U.fmtH(c.raw)}${c.dataset.label === 'Commits' ? ` · ${U.fmtInt(s[c.dataIndex].commits)} commits` : ''}` : `${U.fmtH(c.raw)} · ${U.fmtInt(s[c.dataIndex].commits)} commits`,
+        { scales: esc2, layout: { padding: { top: 16, left: 66, bottom: tabela.length * 18 + 4 } } });
+    if (R.temAtv) o.plugins.tooltip.callbacks.footer = rodapeSuporte('');
+    chart(ids.canvas, { type: 'bar', plugins: [rotulosBarra, tabelaEixo(tabela)], data: { labels: rot, datasets: datasetsHoras(vals, meses.map(y => status.get(y) === 'completo' ? COR.primaria : COR.clara), R.temAtv, { label: 'Horas líquidas' }) }, options: o });
   }
 
   // ── Commits e Cards (detalhamento, página 3): tabelas filtráveis e ordenáveis ──
@@ -2137,40 +2152,45 @@ const UI = (() => {
     out.length = out.lista.length;
     return out;
   }
-  const COLS_CC = tipo => [{ k: 'data', r: 'Data (GMT)', v: r => r.data }, { k: 'repo', r: 'Repositório', v: r => r.repo }, { k: 'resumo', r: 'Resumo', v: r => r.resumo },
-    ...(tipo !== 'autor' ? [{ k: 'autor', r: 'Autor', v: r => App.ctx.nomePessoa(r.pessoaId) }] : [{ k: 'horas', r: 'Horas', num: 1, v: r => r.horas, t: 'horas brutas (no grupo: veja na exportação)' }]), { k: 'liq', r: 'Líquidas', num: 1, v: r => r.horasLiq },
-    { k: 'ret', r: 'Retrab.', v: r => r.retrabalho ? 1 : 0, t: 'retrabalho: horas líquidas zeradas pelo motor' }, ...(App.ctx.temCards ? [{ k: 'card', r: 'Card', v: r => r.cards.join(' '), t: 'código do card citado na mensagem do commit' }] : []), { k: 'sha', r: 'SHA', v: r => r.sha }];
+  /* w = largura fixa da coluna (table-layout:fixed); a coluna sem w (Resumo / Card) fica com o resto */
+  const COLS_CC = tipo => [{ k: 'data', r: 'Data (GMT)', w: 124, v: r => r.data }, { k: 'repo', r: 'Repositório', w: '16%', v: r => r.repo }, { k: 'resumo', r: 'Resumo', v: r => r.resumo },
+    ...(tipo !== 'autor' ? [{ k: 'autor', r: 'Autor', w: '14%', v: r => App.ctx.nomePessoa(r.pessoaId) }] : []), { k: 'horas', r: 'Horas', w: 60, num: 1, v: r => r.horas, t: 'horas estimadas do commit' }, { k: 'sha', r: 'SHA', w: 108, v: r => r.sha }];
+  const colgroup = cols => `<colgroup>${cols.map(c => `<col${c.w ? ` style="width:${typeof c.w === 'number' ? c.w + 'px' : c.w}"` : ''}>`).join('')}</colgroup>`;
+  /* commits e cards mostram o mesmo número de linhas por página: o que cabe na menor das duas áreas
+     (mede a área, não a tabela, para não depender de qual das duas foi desenhada primeiro; cabeçalho = 1 linha) */
+  function linhasCC() {
+    const alt = ['det-aud-wrap', 'det-cards-wrap'].map(U.el).filter(Boolean).map(w => w.clientHeight);
+    return alt.length ? Math.max(1, Math.floor(Math.min(...alt) / ROW_TBL) - 1) : (App.projeto.parametros.porPagina || 20);
+  }
   function preencherCommitsCC() {
     const wrap = U.el('det-aud-wrap'); if (!wrap) return;
     const d = App.detalhe, tipo = d ? d.tipo : 'autor', st = estadoTab('cc-commits'), cols = COLS_CC(tipo), ctx = App.ctx;
-    const titulos = new Map(); if (ctx.temCards) ctx.cards.forEach(c => { if (!titulos.has(c.codigo)) titulos.set(c.codigo, c.titulo); });
     const base = (App.detalheRows || []).slice().sort((a, b) => b.data.localeCompare(a.data));
     const lista = ordenarFiltrar(base, st, cols, r => `${r.repo} ${r.resumo} ${r.sha} ${r.cards.join(' ')} ${tipo !== 'autor' ? ctx.nomePessoa(r.pessoaId) : ''}`);
-    wrap.innerHTML = `<table class="tbl compacta" id="det-aud" data-total="${lista.length}"><thead><tr>${cols.map(c => thOrd('cc-commits', st, c)).join('')}</tr></thead><tbody></tbody></table>`;
-    const pgc = paginar('commits', lista.length, linhasQueCabem('det-aud-wrap', ROW_TBL));
+    wrap.innerHTML = `<table class="tbl compacta cc-tbl" id="det-aud" data-total="${lista.length}">${colgroup(cols)}<thead><tr>${cols.map(c => thOrd('cc-commits', st, c)).join('')}</tr></thead><tbody></tbody></table>`;
+    const pgc = paginar('commits', lista.length, linhasCC());
     U.el('det-aud-pag').innerHTML = pgc.html;
-    const cel = { data: r => `<td>${U.fmtDataHora(r.data)}</td>`, repo: r => `<td title="${esc(r.repo)}">${esc(r.repo.split('/').pop())}</td>`, resumo: r => `<td class="wrap" title="${esc(r.resumo)}\n${esc(r.justificativa)}${r.risco ? `\nrisco: ${esc(r.risco)}` : ''}\nstack: ${esc(r.stack)}">${esc(r.resumo)}</td>`,
-      autor: r => `<td>${esc(ctx.nomePessoa(r.pessoaId))}</td>`, horas: r => `<td class="num">${U.fmtNum(r.horas, 2)}</td>`, liq: r => `<td class="num">${U.fmtNum(r.horasLiq, 2)}</td>`, ret: r => `<td>${r.retrabalho ? '<span class="pill pa">sim</span>' : ''}</td>`,
-      card: r => `<td>${r.cards.map(c => `<span class="pill pt" title="${esc(titulos.get(c) || 'fora da base de cards')}">${esc(c)}</span>`).join(' ')}</td>`,
+    const cel = { data: r => `<td>${U.fmtDataHora(r.data)}</td>`, repo: r => `<td title="${esc(r.repo)}">${esc(r.repo.split('/').pop())}</td>`, resumo: r => `<td title="${esc(r.resumo)}\n${esc(r.justificativa)}${r.risco ? `\nrisco: ${esc(r.risco)}` : ''}\nstack: ${esc(r.stack)}">${esc(r.resumo)}</td>`,
+      autor: r => `<td title="${esc(ctx.nomePessoa(r.pessoaId))}">${esc(ctx.nomePessoa(r.pessoaId))}</td>`, horas: r => `<td class="num">${U.fmtNum(r.horas, 2)}</td>`,
       sha: r => `<td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.sha.slice(0, 12))}</a>` : esc(r.sha.slice(0, 12))}</td>` };
     wrap.querySelector('tbody').innerHTML = lista.slice(pgc.ini, pgc.fim).map(r => `<tr>${cols.map(c => cel[c.k](r)).join('')}</tr>`).join('') || `<tr><td colspan="${cols.length}" class="note" style="padding:10px">${st.q ? 'Nenhum commit com esse filtro.' : 'Sem commits no período.'}</td></tr>`;
   }
-  const COLS_CARDS = tipo => [{ k: 'codigo', r: 'Código', v: c => c.codigo }, { k: 'titulo', r: 'Card', v: c => c.titulo }, { k: 'tipo', r: 'Tipo', v: c => c.tipo },
-    { k: 'meses', r: 'Mês', v: c => c.meses[c.meses.length - 1], t: 'mês(es) em que o card foi movimentado no período' },
-    ...(tipo !== 'autor' ? [{ k: 'pessoas', r: 'Responsáveis', v: c => c.pessoas.join(', ') }] : []), { k: 'epico', r: 'Épico', v: c => c.epico },
-    { k: 'commits', r: 'Commits', num: 1, v: c => c.commits, t: 'commits do recorte que citam o card na mensagem' }];
+  const COLS_CARDS = tipo => [{ k: 'codigo', r: 'Código', w: 124, v: c => c.codigo }, { k: 'titulo', r: 'Card', v: c => c.titulo }, { k: 'tipo', r: 'Tipo', w: '9%', v: c => c.tipo },
+    { k: 'meses', r: 'Mês', w: '9%', v: c => c.meses[c.meses.length - 1], t: 'mês(es) em que o card foi movimentado no período' },
+    ...(tipo !== 'autor' ? [{ k: 'pessoas', r: 'Responsáveis', w: '14%', v: c => c.pessoas.join(', ') }] : []), { k: 'epico', r: 'Épico', w: tipo !== 'autor' ? '18%' : '22%', v: c => c.epico },
+    { k: 'commits', r: 'Commits', w: 72, num: 1, v: c => c.commits, t: 'commits do recorte que citam o card na mensagem' }];
   function preencherCardsCC() {
     const wrap = U.el('det-cards-wrap'); if (!wrap) return;
     const ctx = App.ctx;
     if (!ctx.temCards) { wrap.innerHTML = `<div class="empty" style="padding:20px"><p>Importe a base de cards do Kanban em Dados e cadastro › Cards Kanban para ver os cards movimentados no período.</p></div>`; U.el('det-cards-pag').innerHTML = ''; return; }
     const d = App.detalhe, tipo = d ? d.tipo : 'autor', st = estadoTab('cc-cards'), cols = COLS_CARDS(tipo), cds = App.detalheCards || { lista: [] };
     const lista = ordenarFiltrar(cds.lista, st, cols, c => `${c.codigo} ${c.titulo} ${c.tipo} ${c.epico} ${c.iniciativa} ${c.pessoas.join(' ')}`);
-    wrap.innerHTML = `<table class="tbl compacta" id="det-cards" data-total="${lista.length}"><thead><tr>${cols.map(c => thOrd('cc-cards', st, c)).join('')}</tr></thead><tbody></tbody></table>`;
-    const pgc = paginar('cards', lista.length, linhasQueCabem('det-cards-wrap', ROW_TBL));
+    wrap.innerHTML = `<table class="tbl compacta cc-tbl" id="det-cards" data-total="${lista.length}">${colgroup(cols)}<thead><tr>${cols.map(c => thOrd('cc-cards', st, c)).join('')}</tr></thead><tbody></tbody></table>`;
+    const pgc = paginar('cards', lista.length, linhasCC());
     U.el('det-cards-pag').innerHTML = pgc.html;
     const dica = c => [c.titulo, c.pai && `pai: ${c.pai}`, c.iniciativa && `iniciativa: ${c.iniciativa}`, c.criadoEm && `criado em ${U.fmtData(c.criadoEm)}`, c.janelas.length && `janelas: ${c.janelas.join(', ')}`, c.outros && `outros responsáveis: ${c.outros}`, c.descricao].filter(Boolean).join('\n');
     const cel = { codigo: c => `<td><b>${esc(c.codigo)}</b>${c.novo ? ' <span class="pill pt" title="criado no mês em que foi movimentado">novo</span>' : ''}${c.validar ? ' <span class="pill pa" title="vínculo pessoa × Kanban por sugestão (validar)">validar</span>' : ''}</td>`,
-      titulo: c => `<td class="wrap" title="${esc(dica(c))}">${esc(c.titulo)}</td>`, tipo: c => `<td>${esc(c.tipo)}</td>`, meses: c => `<td>${esc(c.meses.map(U.fmtMes).join(', '))}</td>`,
+      titulo: c => `<td title="${esc(dica(c))}">${esc(c.titulo)}</td>`, tipo: c => `<td title="${esc(c.tipo)}">${esc(c.tipo)}</td>`, meses: c => `<td title="${esc(c.meses.map(U.fmtMes).join(', '))}">${esc(c.meses.map(U.fmtMes).join(', '))}</td>`,
       pessoas: c => `<td title="${esc(c.pessoas.join(', '))}">${esc(c.pessoas.length > 1 ? `${c.pessoas[0]} (+${c.pessoas.length - 1})` : c.pessoas[0] || '')}</td>`, epico: c => `<td title="${esc(c.epico)}">${esc(c.epico)}</td>`,
       commits: c => `<td class="num">${c.commits ? `<b>${U.fmtInt(c.commits)}</b>` : nc('0')}</td>` };
     wrap.querySelector('tbody').innerHTML = lista.slice(pgc.ini, pgc.fim).map(c => `<tr>${cols.map(k => cel[k.k](c)).join('')}</tr>`).join('') || `<tr><td colspan="${cols.length}" class="note" style="padding:10px">${st.q ? 'Nenhum card com esse filtro.' : 'Nenhum card movimentado no período.'}</td></tr>`;
@@ -2291,7 +2311,7 @@ const UI = (() => {
     return `${aviso}<div class="card"><div class="card-hdr"><div><div class="card-title">Premissas de Atividades Fora do Commit</div><div class="card-sub">esforço estimado em atividades de merge request que não geram commit · ${atv.length ? `${U.fmtInt(atv.length)} eventos, ${U.fmtH(tot)} (${totCommits ? U.fmtPct(tot / totCommits, 0) : '—'} das ${U.fmtH(totCommits)} de commits) · ${U.fmtMes(meses[0])} a ${U.fmtMes(meses[1])}` : 'sem dados'}${fonte ? ` · parâmetros de ${esc(fonte.nomeArquivo)}` : ''}</div></div></div>
       <div class="card-body"><div class="tbl-wrap"><table class="tbl compacta"><thead><tr><th>Atividade</th><th>O que é</th><th>Regra de horas (motor)</th><th class="num">Eventos</th><th class="num">Horas</th><th class="num">h/evento</th><th class="num">Pessoas</th><th class="num">% das horas</th></tr></thead><tbody>${linhas}</tbody></table></div></div></div>
       <div class="grid-2 fill"><div class="card fill"><div class="card-hdr"><div><div class="card-title">Como a aplicação usa</div></div></div><div class="card-body" style="overflow:auto"><div class="note">
-        • Revisão, Integração e Reexecução de CI aparecem <b>ao lado</b> das horas de commits: três colunas a mais nas tabelas e três cores a mais nas barras empilhadas.<br>
+        • Revisão, Integração e Reexecução de CI aparecem <b>ao lado</b> das horas de commits: três colunas a mais nas tabelas e três tons de cinza empilhados sobre os commits nas barras (o rótulo da barra e a meta seguem só os commits).<br>
         • Elas <b>não entram</b> na produtividade, na meta, na classificação (detratores / impulsionadores), na referência nem na variação: esses números seguem só com horas de commits.<br>
         • Pessoa: "Pessoa (Usuário)" + origem do MR, a mesma identidade dos commits (se o usuário não aparece nos commits, usa a conta do GitLab); o cadastro liga pelos aliases.<br>
         • Mês e atributos (empresa, tribo, squad) pela data do evento; repositório = o do MR. Atividades não têm stack: com filtro ou agrupamento por stack, ficam de fora.<br>
