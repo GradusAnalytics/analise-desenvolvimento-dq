@@ -2893,85 +2893,92 @@ const IA = (() => {
   const r1 = v => U.ok(v) ? Math.round(v * 10) / 10 : null, r3 = v => U.ok(v) ? Math.round(v * 1000) / 1000 : null;
   const perMeses = ms => ms.length ? (ms.length === 1 ? U.fmtMes(ms[0]) : `${U.fmtMes(ms[0])}–${U.fmtMes(ms[ms.length - 1])}`) : '—';
 
-  // ── instruções (Prompt_Insights_LLM_Gaps_Produtividade.md) ───────────────
-  const BASE = `Você é um analista sênior de produtividade de engenharia de software da Gradus Consultoria, apoiando
-consultores em projetos de dimensionamento de times de tecnologia. Sua tarefa é identificar os
-principais GAPS DE PRODUTIVIDADE de um recorte e propor ações que gerem ganho mensurável.
+  // ── instruções: a aplicação calcula os números, a IA escolhe a alavanca e a ação de cada grupo, a aplicação confere ──
+  const BASE = `Você é um analista sênior de produtividade de engenharia de software da Gradus Consultoria. Apoia consultores
+que dimensionam times de tecnologia e precisam levar ao cliente ações que mudem o número, não diagnósticos genéricos.
 
-## O que os dados representam (leia antes de concluir qualquer coisa)
-- "Horas" são ESFORÇO ESTIMADO por IA sobre o código entregue em cada commit, não horas trabalhadas
-  apontadas. Horas líquidas já descontam retrabalho, merges e duplicatas.
-- Produtividade = horas líquidas ÷ meses completos (h/mês). "h/mês·dev" = horas do mês ÷
-  desenvolvedores do mês (quem comitou + cadastrados vigentes).
-- Régua = produtividade mediana da tribo no período da régua (tribo com ≥ 3 pessoas; senão, a
-  mediana do universo filtrado). Detrator < limiar inferior da régua; impulsionador > limiar superior.
-- Meses com cobertura parcial não entram em médias nem em classificação.
-- Commits NÃO capturam todo o trabalho: revisão de código, arquitetura, refinamento, sustentação,
-  on-call, gestão e mentoria produzem pouco ou nenhum commit. Baixa produtividade em commits é
-  um SINAL para investigar, nunca uma conclusão sobre desempenho.
+## O que os dados representam
+- "Horas" são ESFORÇO ESTIMADO por IA sobre o código entregue em cada commit, não horas trabalhadas. Horas líquidas
+  já descontam retrabalho, merges e duplicatas.
+- realizado_h_mes_dev = horas dos meses completos ÷ desenvolvedores-mês (quem comitou + cadastrados vigentes). É o
+  mesmo número do Placar, do Plano de ação e da Evolução.
+- A meta de cada dev é um percentil da produtividade da tribo dele (meta.meta). Detrator: abaixo de limiares.detrator
+  × meta; impulsionador: acima de limiares.impulsionador × meta.
+- Revisão, integração (merge do MR) e reexecução de CI são atividades fora do commit estimadas pelo motor: capacidade
+  que o time gasta e que não entra no realizado, na meta nem na classificação.
+- Commits não capturam todo o trabalho (arquitetura, refinamento, sustentação, on-call, gestão). Baixa produtividade
+  em commits é sinal para agir sobre o processo do grupo, nunca avaliação de pessoas.
 
 ## Regras invioláveis
-1. Use apenas números presentes no JSON de entrada. Não invente, não extrapole séries, não estime
-   o que não foi fornecido. Todo número citado deve ser rastreável a um campo da entrada.
-2. Se um bloco estiver ausente ou nulo (ex.: "fluxo_mr", "revisoes"), NÃO produza insights sobre
-   ele. Registre em "lacunas_de_dados" o que faltou e que decisão ele permitiria.
-3. Insights são sobre GRUPOS (empresa, tribo, squad, repositório, stack). Pessoas aparecem só
-   pseudonimizadas e só como "casos a investigar" dentro de um gap de grupo; nunca ranqueie
-   pessoas nem use linguagem de avaliação de desempenho.
-4. Respeite amostra mínima: grupo com menos de 3 pessoas ou menos de 2 meses completos gera no
-   máximo confiança "baixa". Diferenças pequenas (< 10% da régua) não são gap.
-5. Compare apenas o comparável: mesma natureza de trabalho e senioridade quando esses campos
-   existirem; senioridade segmenta, não corrige horas.
-6. Separe QUALIDADE DE DADO de PRODUTIVIDADE: pessoas sem cadastro, cobertura parcial, contas
-   automatizadas, pessoas vigentes sem nenhum commit (pode ser cadastro desatualizado,
-   papel não-dev ou ociosidade) viram insight do tipo "qualidade_de_dado" antes de qualquer conclusão.
-7. Para cada gap, apresente ao menos uma hipótese alternativa que explicaria o número sem
-   haver perda de produtividade (ex.: squad de sustentação, time de plataforma revisando muito).
-
-## Como procurar gaps (percorra nesta ordem)
-A. Nível: grupos com h/mês·dev abaixo da régua e maior número absoluto de detratores.
-B. Tendência: variação negativa consistente (queda em 2+ janelas) ou quebra após um mês específico.
-C. Dispersão: P75/P25 alto dentro do grupo (processo desigual, dependência de poucas pessoas).
-D. Concentração: participação dos 3 maiores contribuidores > 50% das horas (risco de gargalo).
-E. Retrabalho: horas de retrabalho ÷ horas brutas acima da mediana dos grupos.
-F. Tamanho e risco: linhas por commit muito acima dos pares, alta proporção de risco alto.
-G. Fluxo de MR (só se fornecido): lead time até merge, tempo até primeira revisão, % de MRs
-   sem revisão, revisões e comentários por MR, tamanho mediano do MR, MRs reabertos, concentração
-   de revisores (poucas pessoas revisando para o time todo).
-H. Revisão x commit (só se fornecido): pessoas/grupos com poucas horas em commits mas muitas
-   revisões — isso é capacidade alocada em revisão, não gap; reclassifique antes de concluir.
-I. Capacidade ociosa: cadastrados vigentes com zero entrega em meses completos.
-
-## Como quantificar o ganho
-- Ganho conservador (h/mês) = Σ sobre as pessoas detratoras do grupo de
-  (limiar_inferior × régua − produtividade da pessoa), só para quem está abaixo do limiar.
-- Ganho potencial (h/mês) = (régua − h/mês·dev do grupo) × devs do grupo, se positivo.
-- Expresse também em FTE-equivalente = ganho ÷ régua do grupo.
-- Para gaps de fluxo (MR/revisão), estime o ganho apenas se houver dado de horas associado;
-  caso contrário, descreva o ganho qualitativamente e marque "ganho_h_mes": null.
-- Nunca some ganhos de gaps que se sobrepõem (mesmas pessoas); indique a sobreposição.`;
+1. Use só números da entrada. Em campos numéricos (evidencias, indicador), copie o valor exatamente como está, com as
+   frações em fração (0,549). No texto, arredonde a 1 casa e escreva frações como porcentagem (0,549 = 54,9% ou 55%).
+   Não recalcule, não some, não divida, não extrapole: a aplicação confere cada número e descarta o que não existe na entrada.
+2. Grupos, não pessoas. Pessoas aparecem só pseudonimizadas (P-0001) e nunca são ranqueadas nem avaliadas.
+3. Bloco ausente ou nulo não vira conclusão: vira lacuna de dados.
+4. Amostra pequena (menos de 3 pessoas ou de 3 meses completos) tem confiança no máximo "baixa".`;
 
   const SISTEMA_INSIGHTS = BASE + `
 
-## Priorização
-Ordene por: ganho conservador em h/mês (maior primeiro) × confiança, desempatando pela
-facilidade da ação. Retorne no máximo 10 insights; prefira 5 bons a 10 fracos.
+## Sua tarefa
+Para cada grupo de "grupos" (todos do mesmo nível, já ordenados pelo ganho), devolva UMA recomendação: a alavanca que
+mais explica o gap e uma ação de processo que o tech lead consiga começar na próxima sprint, com alvo numérico.
 
-## Estilo (a tela mostra os números em tabelas e gráficos; o texto só dá a mensagem)
-- Português do Brasil, termos do app (régua, h/mês·dev, detratores, recorte). Números no formato pt-BR (1.234,5).
-- Seja telegráfico. mensagem_principal: até 25 palavras. titulo: até 8. mensagem: até 20. hipóteses, acao e
-  dado_para_confirmar: até 15 cada. motivo_confianca: até 10. lacunas_de_dados: no máximo 3, até 12 palavras cada.
-- A evidência vai em "metricas": 2 a 4 valores copiados exatamente da entrada (mesma unidade; frações continuam
-  frações), cada um com o nome do campo de origem e um rótulo de até 4 palavras. Não repita esses números no texto.
-- acoes_por_grupo: uma ação por grupo de plano_meta.grupos com horas_para_meta_h_mes > 0 (no máximo 15, do maior para o menor),
-  dizendo o que fazer para o grupo chegar à meta. Use o nome exato do grupo. Até 12 palavras.
-- Responda SOMENTE com o JSON do esquema pedido.`;
+## O que a aplicação já fez (não refaça)
+- Calculou o ganho conservador, as horas até a meta e o FTE de cada grupo: são os números do Placar e do Plano de
+  ação. Os grupos não se sobrepõem; a soma deles é o total do recorte.
+- Comparou as métricas de processo de cada grupo com a mediana dos grupos (referencia_grupos) e listou em "sinais" as
+  que estão pelo menos 25% piores que a referência e acima de um mínimo de relevância, da maior diferença para a menor.
+
+## Alavancas (uma por grupo; a evidência sai dos "sinais" do próprio grupo)
+- integracao: integracoes_por_dev_mes ou integracao_h_mes_dev acima da referência, ou horas_commit_por_integracao
+  abaixo (muitos merges para pouco código). Ação típica: agrupar MRs por história ou feature e reduzir as integrações
+  por dev/mês até a referência; merge automático depois da aprovação.
+- revisao: revisao_h_mes_dev ou revisoes_por_dev_mes acima da referência, ou share_top2_revisao alto (poucos revisam
+  para o time todo). Ação típica: rodízio de revisores até a fatia dos 2 maiores chegar à referência; MR menor.
+- pipeline_ci: reexecucoes_ci_por_dev_mes ou reexecucao_ci_h_mes_dev acima da referência. Ação típica: isolar e
+  corrigir os testes instáveis que forçam reexecução, com alvo de reexecuções por dev/mês igual à referência.
+- retrabalho: retrabalho_pct_horas acima da referência. Ação típica: critério de aceite e teste automatizado antes do
+  merge, com alvo de retrabalho igual à referência.
+- tamanho_do_lote: linhas_por_commit_mediana ou risco_alto_pct acima da referência. Ação típica: quebrar entregas em
+  commits e MRs menores, com alvo de linhas por commit igual à referência.
+- concentracao: share_top3 ou dispersao_p75_p25 acima da referência. Ação típica: parear detratores com os maiores
+  contribuidores e fazer rodízio de ownership dos módulos críticos, com alvo de concentração igual à referência.
+- alocacao: sem_commits_vigentes ou sem_cadastro maior que zero. Ação típica: corrigir o cadastro de quem não é dev
+  (sustentação, gestão, saída) para tirá-lo da régua, dizendo quantas pessoas.
+- sem_sinal: o grupo não tem sinal. A ação é obter o dado que separa as hipóteses; confiança "baixa".
+
+## Barra de qualidade
+- Ação = verbo concreto + o que muda no processo do grupo + alvo numérico tirado de referencia_grupos.
+  Bom: "Agrupar MRs por história: de 12,4 para 5,1 integrações por dev/mês".
+  Bom: "Fazer rodízio de revisores: dos 71% nas 2 pessoas que mais revisam para 45%".
+  Ruim: "Mapear papéis e alocação real dos detratores"; "Investigar a queda trimestral"; "Medir sustentação".
+- Não comece a ação por investigar, mapear, avaliar, analisar, entender, acompanhar, monitorar, medir, alinhar,
+  validar ou verificar (exceto em alocacao, para corrigir o cadastro, e em sem_sinal). O que precisa ser checado antes
+  de agir vai em dado_para_confirmar.
+- Diagnóstico = sintoma → causa, com números da entrada: "62% da meta e 8 detratores; 12,4 integrações por dev/mês
+  contra 5,1 na mediana". Observação, não juízo sobre pessoas.
+- Paralelo: mesma estrutura em todos os itens, um item por grupo da lista, no nível dela. Nada de item de tribo,
+  empresa ou pessoa avulsa.
+- Confiança: "alta" quando 2 ou mais sinais apontam para a mesma alavanca e a amostra é suficiente; "media" com um
+  sinal; "baixa" em sem_sinal ou amostra pequena.
+- hipotese_alternativa: por que o número poderia ser normal (squad de sustentação, plataforma, onboarding).
+
+## Mensagem principal
+Uma frase com o total do recorte (totais.ganho_conservador_h_mes) e a alavanca que mais se repete entre os grupos.
+Ex.: "As 897 h/mês de ganho concentram-se em integração e revisão, a alavanca de 6 dos 10 squads".
+
+## Formato
+Português do Brasil, telegráfico, números no formato pt-BR (1.234,5). titulo: até 8 palavras, nomeando a alavanca e o
+sinal. diagnostico: até 25. acao: até 20. hipotese_alternativa e dado_para_confirmar: até 15. motivo_confianca: até 10.
+evidencias: 1 a 3 itens copiados dos "sinais" do grupo (campo, valor do grupo, referência). indicador: o campo que
+comprova o resultado e o alvo (o valor de referência). lacunas_de_dados: no máximo 3, até 12 palavras cada.
+Responda SOMENTE com o JSON do esquema.`;
 
   const SISTEMA_CHAT = BASE + `
 
 ## Nesta conversa
 Você conversa com um consultor da Gradus dentro da aplicação "Análise de desenvolvimento". O recorte que ele vê
-está em <recorte>; os insights já gerados, se houver, em <insights_gerados>.
+está em <recorte>; as recomendações já geradas, se houver, em <insights_gerados>.
 - Seja breve: abra com a resposta em uma frase curta, em negrito. Depois, no máximo 3 tópicos curtos. Nada de
   parágrafos longos: até 80 palavras de texto por resposta.
 - Mostre números em tabela ou gráfico, não em frases. Tabela markdown para até 6 linhas; gráfico quando houver
@@ -2982,35 +2989,32 @@ está em <recorte>; os insights já gerados, se houver, em <insights_gerados>.
 \`\`\`
   "tipo" é "barra", "barra_horizontal" ou "linha" (linha só para meses). No máximo 1 gráfico por resposta, até 3
   séries e 12 rótulos, uma única unidade, valores copiados do recorte. No JSON, números com ponto decimal.
+- Ao sugerir ação, siga a mesma barra das recomendações: alavanca dos "sinais", verbo concreto e alvo numérico da
+  referência.
 - Se a pergunta pedir algo fora do recorte (commits, MRs, revisões, nomes), diga isso em uma frase e sugira o filtro
   ou a fonte.
 - Você só conhece pseudônimos (P-0001); nunca tente inferir quem é a pessoa. Nada de ranquear pessoas.`;
 
+  const ALAVANCAS = ['integracao', 'revisao', 'pipeline_ci', 'retrabalho', 'tamanho_do_lote', 'concentracao', 'alocacao', 'sem_sinal'];
   const SCHEMA = (() => {
-    const nulo = t => ({ anyOf: [{ type: t }, { type: 'null' }] });
     const obj = (props, extra = {}) => ({ type: 'object', properties: props, required: Object.keys(props), additionalProperties: false, ...extra });
     const txt = d => ({ type: 'string', description: d });
     return obj({
-      mensagem_principal: txt('uma frase, até 25 palavras: o maior gap e o ganho total conservador sem sobreposição'),
-      insights: { type: 'array', items: obj({
-        prioridade: { type: 'integer' },
-        tipo: { type: 'string', enum: ['nivel', 'tendencia', 'dispersao', 'concentracao', 'retrabalho', 'tamanho_risco', 'fluxo_mr', 'revisao', 'capacidade_ociosa', 'qualidade_de_dado'] },
-        recorte: obj({ nivel: { type: 'string' }, nome: { type: 'string' } }),
-        titulo: txt('até 8 palavras'),
-        mensagem: txt('uma frase, até 20 palavras: o que os números mostram'),
-        metricas: { type: 'array', description: '2 a 4 valores copiados exatamente da entrada', items: obj({ campo: txt('nome do campo na entrada'), rotulo: txt('até 4 palavras'), valor: { type: 'number' } }) },
-        hipotese_causa: txt('até 15 palavras'),
-        hipotese_alternativa: txt('até 15 palavras: explicação sem perda de produtividade'),
-        ganho_h_mes: { anyOf: [obj({ conservador: nulo('number'), potencial: nulo('number'), fte_equivalente: nulo('number') }), { type: 'null' }] },
-        sobreposicao_com: { type: 'array', items: { type: 'integer' } },
-        acao: txt('até 15 palavras, verbo no infinitivo'),
+      mensagem_principal: txt('uma frase: o total do recorte (totais.ganho_conservador_h_mes) e a alavanca que mais se repete'),
+      recomendacoes: { type: 'array', description: 'uma por grupo de "grupos", na mesma ordem', items: obj({
+        grupo: txt('nome exato de um item de "grupos"'),
+        alavanca: { type: 'string', enum: ALAVANCAS },
+        titulo: txt('até 8 palavras: a alavanca e o sinal'),
+        diagnostico: txt('até 25 palavras: sintoma → causa, com números da entrada'),
+        evidencias: { type: 'array', description: '1 a 3 itens copiados dos "sinais" do grupo', items: obj({ campo: txt('campo do sinal'), rotulo: txt('até 4 palavras'), valor: { type: 'number' }, referencia: { type: 'number' } }) },
+        acao: txt('até 20 palavras: verbo concreto + mudança no processo + alvo numérico da referência'),
+        indicador: obj({ campo: txt('campo que comprova o resultado'), alvo: { type: 'number', description: 'o valor de referência do campo' } }),
         dono: { type: 'string', enum: ['tech lead', 'PO', 'gestão', 'RH / cadastro', 'consultoria'] },
-        dado_para_confirmar: txt('até 15 palavras'),
+        hipotese_alternativa: txt('até 15 palavras: explicação sem perda de produtividade'),
+        dado_para_confirmar: txt('até 15 palavras: o que checar antes de agir'),
         confianca: { type: 'string', enum: ['alta', 'media', 'baixa'] },
         motivo_confianca: txt('até 10 palavras'),
       }) },
-      acoes_por_grupo: { type: 'array', items: obj({ grupo: txt('nome exato do grupo em plano_meta.grupos'), acao: txt('até 12 palavras, verbo no infinitivo'),
-        dono: { type: 'string', enum: ['tech lead', 'PO', 'gestão', 'RH / cadastro', 'consultoria'] }, prioridade: { type: 'string', enum: ['alta', 'media', 'baixa'] } }) },
       lacunas_de_dados: { type: 'array', items: txt('até 12 palavras') },
     });
   })();
@@ -3036,69 +3040,90 @@ está em <recorte>; os insights já gerados, se houver, em <insights_gerados>.
     const valDev = (rows, un) => { const liq = new Map(), devs = new Map(); rows.forEach(r => liq.set(r.ym, (liq.get(r.ym) || 0) + r.horasLiq));
       return y => { if (!devs.has(y)) devs.set(y, Calc.devsDoMes(ctx, rows, un, y, status).size); return { num: liq.get(y) || 0, den: devs.get(y) }; }; };
     const idsGrupo = new Map();
-    // atividades fora do commit por pessoa nos meses completos (h/mês·dev = horas ÷ meses completos ÷ pessoas, como h_mes_dev)
-    const atvP = R.temAtv ? Calc.atvPorGrupo(R.atvUniv.filter(a => status.get(a.ym) === 'completo'), 'autor') : null;
-    const foraDoCommit = gids => { if (!atvP || !R.mesesCompletos || !gids.length) return null; const s = Calc.zeroAtv(); gids.forEach(id => { const a = atvP.get(id); if (a) Calc.TIPOS_ATV.forEach(t => s[t] += a[t]); });
-      const d = R.mesesCompletos * gids.length; return { revisao_h_mes_dev: r1(s.revisao / d), integracao_h_mes_dev: r1(s.integracao / d), reexecucao_ci_h_mes_dev: r1(s.ci / d) }; };
-    function grupo(nv, nome, gids) {
-      const set = new Set(gids), rows = gids.flatMap(id => rp.get(id) || []), rowsSP = gids.flatMap(id => rpSP.get(id) || []);
-      const cl = gids.map(id => [id, R.cls.pessoas.get(id)]).filter(([, c]) => c);
-      const cont = { detrator: 0, neutro: 0, impulsionador: 0, semRegua: 0 }; cl.forEach(([, c]) => cont[c.categoria || 'semRegua']++);
-      const reguas = cl.map(([, c]) => c.regua).filter(U.ok), prods = gids.map(id => R.prod.valores.get(id) || 0);
-      const hmd = R.mesesCompletos ? prods.reduce((a, b) => a + b, 0) / gids.length : null;
-      const reguaMedia = reguas.length ? reguas.reduce((a, b) => a + b, 0) / reguas.length : null;
+    // um nível só, o mais fino do cadastro (squad), o mesmo do Placar e do Plano de ação: grupos que não se sobrepõem e somam o total
+    const nivel = UI.nivelPlano(R), nv = nivel || 'universo';
+    const perim = Calc.planoMeta(ctx, R.rowsUniv, univ, meses, status, lim, R.attrs, R.cls, null)[0];
+    const plano = nivel ? Calc.planoMeta(ctx, R.rowsUniv, univ, meses, status, lim, R.attrs, R.cls, nivel) : (perim ? [perim] : []);
+    // ganho conservador por pessoa (detrator levado ao limiar inferior, sem compensação) e em FTE: a mesma conta do Placar
+    const gapP = id => { const c = R.cls.pessoas.get(id); return c && c.categoria === 'detrator' ? Math.max(0, lim.det * c.regua - c.valor) : 0; };
+    const fteP = id => { const c = R.cls.pessoas.get(id); return c && c.categoria === 'detrator' && c.regua > 0 ? gapP(id) / c.regua : 0; };
+    // atividades fora do commit nos meses completos: horas e quantidade de eventos por tipo, e revisões por revisor
+    const atvComp = R.temAtv ? R.atvUniv.filter(a => status.get(a.ym) === 'completo') : [];
+    const atvDe = set => { const h = Calc.zeroAtv(), n = { revisao: 0, integracao: 0, ci: 0 }, rev = new Map();
+      atvComp.forEach(a => { if (!set.has(a.pessoaId)) return; h[a.tipo] += a.horas; n[a.tipo]++; if (a.tipo === 'revisao') rev.set(a.pessoaId, (rev.get(a.pessoaId) || 0) + 1); });
+      return { h, n, rev }; };
+    function grupo(g) {
+      const gids = g.ids, set = new Set(gids), nome = nivel ? (g.nome || `(sem ${nivel})`) : 'Todos os desenvolvedores';
+      const rows = gids.flatMap(id => rp.get(id) || []), rowsSP = gids.flatMap(id => rpSP.get(id) || []);
+      const rowsC = rows.filter(r => status.get(r.ym) === 'completo'), liqC = rowsC.reduce((a, r) => a + r.horasLiq, 0), dm = g.devMes || 0, porDm = x => dm ? r1(x / dm) : null;
+      const cont = { detrator: 0, neutro: 0, impulsionador: 0, semRegua: 0 }; gids.forEach(id => { const c = R.cls.pessoas.get(id); if (c) cont[c.categoria || 'semRegua']++; });
+      const prods = gids.map(id => R.prod.valores.get(id) || 0), p25 = U.quantil(prods, 0.25), p75 = U.quantil(prods, 0.75);
       const bruta = rows.reduce((a, r) => a + r.horas, 0), ret = rows.reduce((a, r) => a + (r.horasRet || 0), 0), liq = rows.reduce((a, r) => a + r.horasLiq, 0);
       const porP = gids.map(id => (rp.get(id) || []).reduce((a, r) => a + r.horasLiq, 0)).sort((a, b) => b - a);
       const st = {}; rows.forEach(r => st[r.stack] = (st[r.stack] || 0) + r.horasLiq);
       const v3 = Calc.variacao(valDev(rowsSP, set), f.mesIni, f.mesFim, status, 'tri');
-      const detr = cl.filter(([, c]) => c.categoria === 'detrator');
-      const cons = detr.reduce((a, [, c]) => a + Math.max(0, lim.det * c.regua - c.valor), 0);
-      const pot = hmd !== null && reguaMedia !== null ? Math.max(0, (reguaMedia - hmd) * gids.length) : null;
-      idsGrupo.set(`${nv}|${nome}`, { ids: gids, regua: reguaMedia });
-      return { nivel: nv, nome, pessoas: gids.length, h_mes_dev: r1(hmd),
-        regua_min: r1(reguas.length ? Math.min(...reguas) : null), regua_max: r1(reguas.length ? Math.max(...reguas) : null), regua_do_universo: cl.some(([, c]) => c.base === 'universo'),
-        detratores: cont.detrator, neutros: cont.neutro, impulsionadores: cont.impulsionador, sem_regua: cont.semRegua,
-        variacao_3m: r3(v3.variacao), variacao_3m_motivo: v3.variacao === null ? v3.motivo : undefined,
-        p25_h_mes: r1(U.quantil(prods, 0.25)), p75_h_mes: r1(U.quantil(prods, 0.75)), horas_liquidas: r1(liq), commits: rows.length,
-        retrabalho_pct_horas: bruta > 0 ? r3(ret / bruta) : null, share_top3: liq > 0 ? r3(porP.slice(0, 3).reduce((a, b) => a + b, 0) / liq) : null,
+      const A = R.temAtv ? atvDe(set) : null, revOrd = A ? [...A.rev.values()].sort((a, b) => b - a) : [];
+      idsGrupo.set(`${nv}|${nome}`, { ids: gids, regua: g.meta });
+      return { nivel: nv, nome, ...(nivel === 'squad' && g.tribo ? { tribo: g.tribo } : {}), pessoas: gids.length, devs_mes: r1(g.devsMes),
+        realizado_h_mes_dev: r1(g.atual), meta_h_mes_dev: r1(g.meta), pct_meta: r3(g.pctMeta), horas_para_meta_h_mes: r1(g.horasParaMeta),
+        ganho_conservador_h_mes: r1(gids.reduce((a, id) => a + gapP(id), 0)), fte_equivalente: r1(gids.reduce((a, id) => a + fteP(id), 0)),
+        detratores: cont.detrator, neutros: cont.neutro, impulsionadores: cont.impulsionador, sem_meta: cont.semRegua,
+        variacao_3m: r3(v3.variacao), p25_h_mes: r1(p25), p75_h_mes: r1(p75), dispersao_p75_p25: p25 > 0 ? r1(p75 / p25) : null,
+        share_top3: liq > 0 ? r3(porP.slice(0, 3).reduce((a, b) => a + b, 0) / liq) : null, retrabalho_pct_horas: bruta > 0 ? r3(ret / bruta) : null,
         linhas_por_commit_mediana: rows.length ? Math.round(U.mediana(rows.map(r => (r.insercoes || 0) + (r.delecoes || 0)))) : null,
         risco_alto_pct: rows.length ? r3(rows.filter(r => /^(alto|high)/i.test(r.risco || '')).length / rows.length) : null,
+        commits_por_dev_mes: porDm(rowsC.length),
+        revisao_h_mes_dev: A ? porDm(A.h.revisao) : null, integracao_h_mes_dev: A ? porDm(A.h.integracao) : null, reexecucao_ci_h_mes_dev: A ? porDm(A.h.ci) : null,
+        revisoes_por_dev_mes: A ? porDm(A.n.revisao) : null, integracoes_por_dev_mes: A ? porDm(A.n.integracao) : null, reexecucoes_ci_por_dev_mes: A ? porDm(A.n.ci) : null,
+        horas_commit_por_integracao: A && A.n.integracao ? r1(liqC / A.n.integracao) : null,
+        share_top2_revisao: A && A.n.revisao >= 5 ? r3(((revOrd[0] || 0) + (revOrd[1] || 0)) / A.n.revisao) : null,
         sem_commits_vigentes: gids.filter(id => !rp.has(id)).length, sem_cadastro: ctx.temCadastro ? gids.filter(id => !(ctx.pessoas.get(id) || {}).cadastrada).length : null,
         stacks_principais: Object.entries(st).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([s, h]) => ({ stack: s, share: liq > 0 ? r3(h / liq) : null })),
-        ganho_conservador_h_mes: r1(cons), ganho_potencial_h_mes: r1(pot), fte_equivalente: reguaMedia ? r1(cons / reguaMedia) : null, fora_do_commit: foraDoCommit(gids),
-        casos_a_investigar: detr.sort((a, b) => a[1].razao - b[1].razao).slice(0, 5).map(([id, c]) => ({ pessoa: pseudo.get(id), h_mes: r1(c.valor), razao_regua: r3(c.razao) })) };
+        casos_a_investigar: gids.filter(id => (R.cls.pessoas.get(id) || {}).categoria === 'detrator').sort((a, b) => R.cls.pessoas.get(a).razao - R.cls.pessoas.get(b).razao).slice(0, 5)
+          .map(id => ({ pessoa: pseudo.get(id), h_mes: r1(R.cls.pessoas.get(id).valor), razao_meta: r3(R.cls.pessoas.get(id).razao) })) };
     }
-    // nível analisado (o mesmo do gráfico de classificação) e o nível logo abaixo, se houver no cadastro
-    const NIV = ['empresa', 'tribo', 'squad'], nivel = UI.nivelClassificacao(R);
-    const niveis = nivel ? [nivel, ...NIV.slice(NIV.indexOf(nivel) + 1, NIV.indexOf(nivel) + 2).filter(k => ctx.camposPessoa[k])] : [];
-    const grupos = []; let omitidos = 0;
-    if (!niveis.length) grupos.push(grupo('universo', 'Todos os desenvolvedores', ids));
-    for (const k of niveis) {
-      const m = new Map(); ids.forEach(id => { const v = (R.attrs.get(id) || {})[k] || `(sem ${Calc.ROTULO_CRIT[k].toLowerCase()} ou mudou no período)`; if (!m.has(v)) m.set(v, []); m.get(v).push(id); });
-      const ord = [...m.entries()].sort((a, b) => b[1].length - a[1].length); omitidos += Math.max(0, ord.length - 25);
-      ord.slice(0, 25).forEach(([v, g]) => grupos.push(grupo(k, v, g)));
-    }
+    // sinais: métricas de processo do grupo pelo menos 25% piores que a mediana dos grupos com 3+ pessoas (referência) e acima
+    // de um mínimo de relevância (0,9% × 0,6% de commits de risco é 50% a mais, mas não muda processo nenhum)
+    const PIOR_ALTO = ['integracoes_por_dev_mes', 'integracao_h_mes_dev', 'revisoes_por_dev_mes', 'revisao_h_mes_dev', 'share_top2_revisao', 'reexecucoes_ci_por_dev_mes', 'reexecucao_ci_h_mes_dev',
+      'retrabalho_pct_horas', 'linhas_por_commit_mediana', 'risco_alto_pct', 'share_top3', 'dispersao_p75_p25'], PIOR_BAIXO = ['horas_commit_por_integracao'];
+    const MINIMO = { integracoes_por_dev_mes: 2, integracao_h_mes_dev: 1, revisoes_por_dev_mes: 2, revisao_h_mes_dev: 1, share_top2_revisao: 0.5, reexecucoes_ci_por_dev_mes: 0.5, reexecucao_ci_h_mes_dev: 0.5,
+      retrabalho_pct_horas: 0.03, linhas_por_commit_mediana: 50, risco_alto_pct: 0.05, share_top3: 0.5, dispersao_p75_p25: 2 };
+    const todos = plano.map(grupo), base = todos.filter(g => g.pessoas >= 3).length >= 3 ? todos.filter(g => g.pessoas >= 3) : todos;
+    const referencia = {};
+    [...PIOR_ALTO, ...PIOR_BAIXO, 'realizado_h_mes_dev', 'pct_meta'].forEach(k => { const v = base.map(g => g[k]).filter(U.ok); if (v.length) referencia[k] = k === 'linhas_por_commit_mediana' ? Math.round(U.mediana(v)) : /pct|share/.test(k) ? r3(U.mediana(v)) : r1(U.mediana(v)); });
+    todos.forEach(g => {
+      const s = [];
+      PIOR_ALTO.forEach(k => { const v = g[k], ref = referencia[k]; if (U.ok(v) && U.ok(ref) && ref > 0 && v >= 1.25 * ref && v >= MINIMO[k]) s.push({ campo: k, valor: v, referencia: ref, d: v / ref }); });
+      PIOR_BAIXO.forEach(k => { const v = g[k], ref = referencia[k]; if (U.ok(v) && U.ok(ref) && v > 0 && ref >= 1.25 * v) s.push({ campo: k, valor: v, referencia: ref, d: ref / v }); });
+      ['sem_commits_vigentes', 'sem_cadastro'].forEach(k => { if (g[k]) s.push({ campo: k, valor: g[k], referencia: 0, d: 1.25 }); });
+      g.sinais = s.sort((a, b) => b.d - a.d).slice(0, 4).map(({ d, ...x }) => x);
+    });
+    // a IA recomenda para os grupos com ganho (até 15, do maior para o menor); os que estão na meta vão só como contexto
+    const comGap = todos.filter(g => g.ganho_conservador_h_mes > 0 || g.horas_para_meta_h_mes > 0)
+      .sort((a, b) => b.ganho_conservador_h_mes - a.ganho_conservador_h_mes || b.horas_para_meta_h_mes - a.horas_para_meta_h_mes);
+    const grupos = comGap.slice(0, 15), omitidos = comGap.length - grupos.length;
     const serie = Calc.serieMensalDevs(ctx, R.rowsUniv, univ, meses, status, lim, R.rg);
     const comp = serie.filter(x => status.get(x.ym) === 'completo'), devMes = comp.reduce((a, x) => a + x.devs, 0);
-    const vt = Calc.variacao(valDev(R.rowsUnivSP, univ), f.mesIni, f.mesFim, status, R.janela), eU = Calc.estat(ids.map(id => R.prod.valores.get(id) || 0));
+    const vt = Calc.variacao(valDev(R.rowsUnivSP, univ), f.mesIni, f.mesFim, status, R.janela);
     const atvU = Calc.somaAtv(R.atvUniv);
-    const nvPl = UI.nivelPlano(R), perim = Calc.planoMeta(ctx, R.rowsUniv, univ, meses, status, lim, R.attrs, R.cls, null)[0];
-    const plano = nvPl ? Calc.planoMeta(ctx, R.rowsUniv, univ, meses, status, lim, R.attrs, R.cls, nvPl) : [];
     const payload = {
       meta: { periodo: perMeses(meses), meses_completos: completos.length, meses_parciais: parciais.map(U.fmtMes), meta: UI.descMeta(R, false),
         limiares: { detrator: lim.det, impulsionador: lim.imp }, modo: R.an.modo, criterios_segmentacao: R.criterios,
         filtros: { empresa: f.empresa, tribo: f.tribo, squad: f.squad, repositorio: f.repos, stack: f.stacks, senioridade: f.senioridade, natureza: f.natureza },
-        nivel_analisado: nivel || 'universo', niveis_enviados: niveis.length ? niveis : ['universo'], dados_demonstrativos: App.projeto.fontes.some(x => x.demo) },
-      totais: { horas_liquidas: r1(Calc.somaLiq(R.rowsUniv)), h_mes_dev: r1(devMes ? comp.reduce((a, x) => a + x.liq, 0) / devMes : null), pessoas_universo: ids.length,
-        variacao: { janela: R.janela, atual: r1(vt.atual), anterior: r1(vt.anterior), variacao: r3(vt.variacao), motivo: vt.motivo || undefined },
-        referencia_universo: { mediana_h_mes: r1(eU.mediana), p25: r1(eU.p25), p75: r1(eU.p75) }, meta_h_mes_dev: r1(perim && perim.meta) },
+        nivel: nv, dados_demonstrativos: App.projeto.fontes.some(x => x.demo) },
+      totais: { horas_liquidas: r1(Calc.somaLiq(R.rowsUniv)), pessoas_universo: ids.length, realizado_h_mes_dev: r1(perim && perim.atual), meta_h_mes_dev: r1(perim && perim.meta),
+        h_mes_dev_serie: r1(devMes ? comp.reduce((a, x) => a + x.liq, 0) / devMes : null),
+        ganho_conservador_h_mes: r1(ids.reduce((a, id) => a + gapP(id), 0)), fte_conservador: r1(ids.reduce((a, id) => a + fteP(id), 0)),
+        horas_para_meta_soma_grupos: r1(todos.reduce((a, g) => a + (g.horas_para_meta_h_mes || 0), 0)),
+        variacao: { janela: R.janela, atual: r1(vt.atual), anterior: r1(vt.anterior), variacao: r3(vt.variacao), motivo: vt.motivo || undefined } },
+      referencia_grupos: referencia,
+      referencia_descricao: `mediana dos ${base.length} ${nivel ? (Calc.ROTULO_CRIT[nivel] || nivel).toLowerCase() + 's' : 'grupos'} ${base === todos ? 'do recorte' : 'com 3 ou mais pessoas'}`,
       serie_mensal: serie.map(x => ({ mes: x.ym, cobertura: status.get(x.ym) || 'sem-dados', h_mes_dev: r1(x.horasPorDev), devs: x.devs, detratores: x.detrator, neutros: x.neutro, impulsionadores: x.impulsionador, sem_regua: x.semRegua })),
-      grupos, fluxo_mr: null,
-      revisoes: R.temAtv ? { descricao: 'atividades fora do commit estimadas pelo motor por MR (não entram em h_mes_dev, régua nem classificação)',
-        horas_revisao: r1(atvU.revisao), horas_integracao: r1(atvU.integracao), horas_reexecucao_ci: r1(atvU.ci), eventos: atvU.eventos,
-        horas_commits: r1(Calc.somaLiq(R.rowsUniv)), ...(foraDoCommit(ids) || {}) } : null,
-      plano_meta: { nivel: nvPl || 'universo', meta_h_mes_dev: r1(perim && perim.meta), realizado_h_mes_dev: r1(perim && perim.atual), gap_h_mes_dev: r1(perim && perim.gap), horas_para_meta_h_mes: r1(perim && perim.horasParaMeta),
-        grupos: plano.slice(0, 40).map(g => ({ nome: g.nome || `(sem ${nvPl})`, tribo: g.tribo, devs_mes: r1(g.devsMes), realizado_h_mes_dev: r1(g.atual), meta_h_mes_dev: r1(g.meta), gap_h_mes_dev: r1(g.gap), pct_meta: r3(g.pctMeta), horas_para_meta_h_mes: r1(g.horasParaMeta), detratores: g.detrator })) },
+      grupos,
+      grupos_na_meta: todos.filter(g => !comGap.includes(g)).map(g => ({ nome: g.nome, ...(g.tribo ? { tribo: g.tribo } : {}), pessoas: g.pessoas, realizado_h_mes_dev: g.realizado_h_mes_dev, meta_h_mes_dev: g.meta_h_mes_dev, pct_meta: g.pct_meta })),
+      revisoes: R.temAtv ? { descricao: 'atividades fora do commit estimadas pelo motor por MR (não entram no realizado, na meta nem na classificação)',
+        horas_revisao: r1(atvU.revisao), horas_integracao: r1(atvU.integracao), horas_reexecucao_ci: r1(atvU.ci), eventos: atvU.eventos, horas_commits: r1(Calc.somaLiq(R.rowsUniv)) } : null,
+      plano_meta: { nivel: nv, meta_h_mes_dev: r1(perim && perim.meta), realizado_h_mes_dev: r1(perim && perim.atual), gap_h_mes_dev: r1(perim && perim.gap), horas_para_meta_h_mes: r1(perim && perim.horasParaMeta) },
       qualidade_dados: { cadastro_carregado: ctx.temCadastro, pessoas_sem_cadastro: ctx.temCadastro ? ids.filter(id => !(ctx.pessoas.get(id) || {}).cadastrada).length : null,
         pessoas_vigentes_sem_commits: ids.filter(id => !rp.has(id)).length, meses_parciais: parciais.length, grupos_omitidos_por_limite: omitidos },
     };
@@ -3110,16 +3135,16 @@ está em <recorte>; os insights já gerados, se houver, em <insights_gerados>.
     return { payload, assinatura: hash(JSON.stringify(payload)), nomes, desc, descTela, trilha, idsGrupo };
   }
   function mensagemDados(payload) {
-    return `Analise o recorte abaixo e devolva os principais gaps de produtividade.
+    const n = payload.grupos.length, rot = payload.meta.nivel === 'universo' ? 'grupo' : payload.meta.nivel;
+    return `Devolva uma recomendação para cada um dos ${n} ${rot}${n === 1 ? '' : 's'} de "grupos", na mesma ordem.
 
 Observações da aplicação:
-- ganho_conservador_h_mes, ganho_potencial_h_mes e fte_equivalente de cada grupo já foram calculados pela aplicação com as fórmulas da instrução; use-os em vez de recalcular. Os grupos de níveis diferentes se sobrepõem (um squad está contido na sua tribo ou empresa): não some ganhos entre eles no resumo.
-- Em "metricas", copie os valores exatamente como estão na entrada, sem calcular diferenças. A aplicação confere cada valor (e os números do texto) e descarta o insight com valor ausente.
-${payload.revisoes ? `- "fluxo_mr" é nulo. "revisoes" traz as horas estimadas de revisão, integração e reexecução de CI (atividades fora do commit), e cada grupo traz fora_do_commit em h/mês·dev: são capacidade alocada fora dos commits (regra H), não entram em h_mes_dev, na régua nem na classificação.` : '- "fluxo_mr" e "revisoes" são nulos: os dados atuais só têm commits.'}
-- A meta (régua) de cada dev é um percentil da produtividade da tribo dele (descrito no campo meta.meta), definido por mês e igual em todo o relatório. plano_meta traz, por grupo, o realizado e a meta em h/mês·dev e as horas por mês que faltam para a meta; use-o em acoes_por_grupo.
-- Proporções (campos _pct, share, variacao, razao_regua, limiares) estão em fração decimal: 0,12 = 12%.
-- h_mes_dev de um grupo é a média da produtividade das pessoas do grupo (h/mês); nos totais e na série mensal é horas do mês ÷ desenvolvedores do mês.
-- Pessoas vêm pseudonimizadas (P-0001). Grupos com nome "(sem … ou mudou no período)" reúnem quem não tem o atributo no cadastro ou trocou de valor dentro do período.
+- Todos os grupos são do nível "${payload.meta.nivel}" e não se sobrepõem. totais.ganho_conservador_h_mes é o número do Placar (soma do ganho de todos os grupos do nível) e totais.horas_para_meta_soma_grupos é o do Plano de ação.
+- "sinais" de cada grupo traz campo, valor do grupo e referência (mediana dos grupos, em referencia_grupos: ${payload.referencia_descricao}). A alavanca, as evidências, o alvo da ação e o indicador saem deles.
+- ${payload.revisoes ? 'Revisão, integração e reexecução de CI vêm do motor por evento de MR: horas e quantidade por dev-mês nos meses completos.' : 'A base não tem atividades de MR (revisão, integração, CI): essas métricas vêm nulas e não podem ser alavanca; registre a falta em lacunas_de_dados.'}
+- Proporções (campos _pct, share, variacao, razao, limiares) estão em fração decimal: 0,12 = 12%.
+- Pessoas vêm pseudonimizadas (P-0001). Grupo "(sem …)" reúne quem não tem o atributo no cadastro ou trocou de valor no período.
+- grupos_na_meta é só contexto: não gera recomendação.
 
 <recorte>
 ${JSON.stringify(payload, null, 1)}
@@ -3142,16 +3167,34 @@ ${JSON.stringify(payload, null, 1)}
   /* n confere se é um valor da entrada (ou a fração dela em %) arredondado a 1 casa, ou a inteiro quando citado inteiro */
   const perto = (c, n) => Math.abs(c - n) <= 0.051 || (Number.isInteger(n) && Math.round(c) === n);
   const bate = (n, vals) => vals.some(v => perto(v, n) || (v <= 10 && perto(v * 100, n)));
+  /* confere cada recomendação contra o que foi enviado e a traduz para o formato da tela (o ganho vem da aplicação, nunca da IA).
+     Descarta: grupo fora da lista ou repetido; evidência que não é o valor do grupo ou a referência; número do texto que não
+     existe na entrada; ação sem alvo numérico ou começando por verbo genérico (investigar, mapear, avaliar...) */
+  const GENERICO = /^\s*(investigar|mapear|avaliar|analisar|entender|acompanhar|monitorar|medir|alinhar|validar|verificar|levantar|estudar|conscientizar)\b/i;
   function validar(obj, payload) {
-    const vals = valoresDe(payload), validos = [], descartados = [];
-    for (const ins of (obj.insights || [])) {
-      const falhas = [...(ins.metricas || []).map(m => m.valor).filter(v => U.ok(v) && !bate(Math.abs(v), vals)),
-        ...numerosTexto(`${ins.titulo || ''} ${ins.mensagem || ''} ${ins.evidencia || ''}`).filter(n => !bate(n, vals))];
-      if (!(ins.metricas || []).length && !ins.evidencia) falhas.push('sem métricas');
-      const g = ins.ganho_h_mes; if (g && U.ok(g.conservador) && !bate(Math.abs(g.conservador), vals)) falhas.push(g.conservador);
+    const vals = valoresDe(payload), ref = payload.referencia_grupos || {}, porNome = new Map(payload.grupos.map((g, i) => [g.nome, { g, i }]));
+    const vistos = new Set(), validos = [], descartados = [];
+    (obj.recomendacoes || []).forEach((rec, j) => {
+      const x = porNome.get(rec.grupo), g = x && x.g, falhas = [], ev = rec.evidencias || [];
+      if (!g) falhas.push('grupo fora da lista'); else if (vistos.has(rec.grupo)) falhas.push('grupo repetido'); else vistos.add(rec.grupo);
+      ev.forEach(e => {
+        if (g && !(U.ok(g[e.campo]) && perto(g[e.campo], e.valor))) falhas.push(`${e.campo} ${fmtG(e.valor)}`);
+        const r0 = e.campo === 'sem_commits_vigentes' || e.campo === 'sem_cadastro' ? 0 : ref[e.campo];
+        if (U.ok(e.referencia) && !(U.ok(r0) && perto(r0, e.referencia))) falhas.push(`referência de ${e.campo} ${fmtG(e.referencia)}`);
+      });
+      if (rec.alavanca !== 'sem_sinal' && !ev.length) falhas.push('sem evidência');
+      falhas.push(...numerosTexto(`${rec.titulo || ''} ${rec.diagnostico || ''} ${rec.acao || ''}`).filter(n => !bate(n, vals)));
+      if (rec.alavanca !== 'sem_sinal' && !/\d/.test(rec.acao || '')) falhas.push('ação sem alvo numérico');
+      if (!['alocacao', 'sem_sinal'].includes(rec.alavanca) && GENERICO.test(rec.acao || '')) falhas.push('ação genérica');
+      const ind = rec.indicador && rec.indicador.campo ? rec.indicador : null;
+      if (ind && U.ok(ind.alvo) && ind.alvo !== 0 && !bate(Math.abs(ind.alvo), vals)) falhas.push(`alvo ${fmtG(ind.alvo)}`);
+      const ins = { prioridade: x ? x.i + 1 : 100 + j, tipo: rec.alavanca, recorte: { nivel: g ? g.nivel : payload.meta.nivel, nome: rec.grupo }, titulo: rec.titulo, mensagem: rec.diagnostico,
+        metricas: ev.map(e => ({ campo: e.campo, rotulo: e.rotulo, valor: e.valor, referencia: e.referencia })), hipotese_causa: '', hipotese_alternativa: rec.hipotese_alternativa,
+        ganho_h_mes: g ? { conservador: g.ganho_conservador_h_mes, potencial: g.horas_para_meta_h_mes, fte_equivalente: g.fte_equivalente } : null, sobreposicao_com: [],
+        acao: rec.acao, indicador: ind, dono: rec.dono, dado_para_confirmar: rec.dado_para_confirmar, confianca: rec.confianca, motivo_confianca: rec.motivo_confianca };
       (falhas.length ? descartados : validos).push(falhas.length ? { ...ins, _falhas: falhas } : ins);
-    }
-    return { validos, descartados };
+    });
+    return { validos: validos.sort((a, b) => a.prioridade - b.prioridade), descartados, faltando: payload.grupos.filter(g => !vistos.has(g.nome)).map(g => g.nome) };
   }
 
   // ── chamadas à API (SDK oficial carregado sob demanda) ───────────────────
@@ -3175,6 +3218,17 @@ ${JSON.stringify(payload, null, 1)}
     return 'Falha na chamada à IA: ' + ((e && e.message) || e);
   }
   function resultadoPara(a) { const ia = App.projeto.ia; return (ia && ia.cache && ia.cache[a]) || null; }
+  /* resposta da IA → resultado guardado: recomendações conferidas, as ações do plano (as mesmas, por grupo) e a mensagem principal,
+     que só fica se todos os números dela existirem na entrada (senão a aplicação escreve a dela, com o total do Placar) */
+  function resultadoDe(obj, X, uso = {}) {
+    const p = X.payload, { validos, descartados, faltando } = validar(obj, p);
+    const acoes = validos.map(v => ({ grupo: v.recorte.nome, acao: v.acao, dono: v.dono, prioridade: v.confianca }));
+    const msg = String(obj.mensagem_principal || ''), okMsg = msg && !numerosTexto(msg).some(n => !bate(n, valoresDe(p)));
+    const rot = p.meta.nivel === 'universo' ? 'grupo' : p.meta.nivel, n = p.grupos.length;
+    const resumo = okMsg ? msg : `${fmtG(p.totais.ganho_conservador_h_mes)} h/mês de ganho conservador em ${U.fmtInt(n)} ${rot}${n === 1 ? '' : 's'} abaixo da meta`;
+    return { formato: 2, assinatura: X.assinatura, desc: X.desc, geradoEm: U.hojeISO(), modelo: MODELO, uso, resumo, validos, descartados, faltando, acoes,
+      lacunas: obj.lacunas_de_dados || [], total: (obj.recomendacoes || []).length, totalApp: p.totais.ganho_conservador_h_mes, metaApp: p.totais.horas_para_meta_soma_grupos };
+  }
   function guardar(res) {
     const ia = App.projeto.ia || (App.projeto.ia = { cache: {} }); ia.cache = ia.cache || {};
     ia.cache[res.assinatura] = res; ia.ultimo = res;
@@ -3200,12 +3254,10 @@ ${JSON.stringify(payload, null, 1)}
       if (msg.stop_reason === 'refusal') throw new Error('o modelo recusou a solicitação' + (msg.stop_details && msg.stop_details.explanation ? `: ${msg.stop_details.explanation}` : '.'));
       if (msg.stop_reason === 'max_tokens') throw new Error('a resposta foi cortada pelo limite de tokens; tente um recorte menor.');
       let obj; try { obj = JSON.parse(msg.content.filter(b => b.type === 'text').map(b => b.text).join('')); } catch (e) { throw new Error('a resposta não veio no formato esperado (JSON inválido).'); }
-      const { validos, descartados } = validar(obj, X.payload), nomesPl = new Set(X.payload.plano_meta.grupos.map(g => g.nome));
-      const acoes = (obj.acoes_por_grupo || []).filter(a => a && nomesPl.has(a.grupo));
-      guardar({ assinatura: X.assinatura, desc: X.desc, geradoEm: U.hojeISO(), modelo: MODELO, uso: { entrada: msg.usage.input_tokens, saida: msg.usage.output_tokens },
-        resumo: obj.mensagem_principal || obj.resumo_executivo || '', validos, descartados, acoes, lacunas: obj.lacunas_de_dados || [], total: (obj.insights || []).length });
+      guardar(resultadoDe(obj, X, { entrada: msg.usage.input_tokens, saida: msg.usage.output_tokens }));
+      const r = resultadoPara(X.assinatura);
       S.selP = null; S.filtro = { q: '', tipo: '', conf: '' }; S.ordem = { col: 'prioridade', dir: 1 }; S.verDescartados = false; App.pag = App.pag || {}; App.pag['ia-ins'] = 1;
-      UI.toast(`Insights gerados: ${validos.length} conferido(s)${descartados.length ? `, ${descartados.length} descartado(s) por citar número fora do recorte` : ''}.`, 'ok');
+      UI.toast(`Recomendações geradas: ${r.validos.length} conferida(s)${r.descartados.length ? `, ${r.descartados.length} descartada(s) por número fora do recorte ou ação sem alvo` : ''}.`, 'ok');
     } catch (e) { if (!S.gerando.cancelado) UI.toast(msgErro(e), 'erro', 0); }
     finally { clearInterval(S.gerando.timer); S.gerando = null; UI.renderTudo(); }
   }
@@ -3278,8 +3330,18 @@ ${JSON.stringify(payload, null, 1)}
 
   // ── tela ─────────────────────────────────────────────────────────────────
   const rotRecorte = r => r ? `${Calc.ROTULO_CRIT[r.nivel] || (r.nivel === 'universo' ? 'Universo' : r.nivel || '')}: ${r.nome || ''}` : '—';
+  const rotNivelIns = ins => Calc.ROTULO_CRIT[(ins.recorte || {}).nivel] || 'Valor';
   const confPill = c => `<span class="pill ${c === 'alta' ? 'pok' : c === 'media' ? 'pa' : 'pg'}">${c === 'media' ? 'média' : esc(c || '—')}</span>`;
-  const ROT_TIPO = { nivel: 'Nível', tendencia: 'Tendência', dispersao: 'Dispersão', concentracao: 'Concentração', retrabalho: 'Retrabalho', tamanho_risco: 'Tamanho e risco', fluxo_mr: 'Fluxo de MR', revisao: 'Revisão', capacidade_ociosa: 'Capacidade ociosa', qualidade_de_dado: 'Qualidade de dado' };
+  // alavancas das recomendações (formato 2) e, para resultados antigos, os tipos de gap
+  const ROT_TIPO = { integracao: 'Integração (merges)', revisao: 'Revisão', pipeline_ci: 'Pipeline de CI', retrabalho: 'Retrabalho', tamanho_do_lote: 'Tamanho do lote', concentracao: 'Concentração',
+    alocacao: 'Alocação e cadastro', sem_sinal: 'Sem sinal nos dados',
+    nivel: 'Nível', tendencia: 'Tendência', dispersao: 'Dispersão', tamanho_risco: 'Tamanho e risco', fluxo_mr: 'Fluxo de MR', capacidade_ociosa: 'Capacidade ociosa', qualidade_de_dado: 'Qualidade de dado' };
+  /* nome legível dos campos que a IA cita como evidência ou indicador */
+  const ROT_CAMPO = { integracoes_por_dev_mes: 'integrações por dev/mês', integracao_h_mes_dev: 'integração (h/mês·dev)', revisoes_por_dev_mes: 'revisões por dev/mês', revisao_h_mes_dev: 'revisão (h/mês·dev)',
+    share_top2_revisao: 'revisões nas 2 pessoas que mais revisam', reexecucoes_ci_por_dev_mes: 'reexecuções de CI por dev/mês', reexecucao_ci_h_mes_dev: 'reexecução de CI (h/mês·dev)',
+    retrabalho_pct_horas: 'retrabalho (% das horas)', linhas_por_commit_mediana: 'linhas por commit (mediana)', risco_alto_pct: 'commits de risco alto', share_top3: 'horas nos 3 maiores',
+    dispersao_p75_p25: 'P75 ÷ P25 da produtividade', horas_commit_por_integracao: 'horas de commit por integração', commits_por_dev_mes: 'commits por dev/mês',
+    sem_commits_vigentes: 'pessoas sem commit', sem_cadastro: 'pessoas sem cadastro', realizado_h_mes_dev: 'realizado (h/mês·dev)', pct_meta: '% da meta' };
   const fmtG = v => U.ok(v) ? U.fmtNum(v, 1) : '—';
   const fmtFalha = n => typeof n === 'number' ? U.fmtNum(n, 1) : esc(n);
 
@@ -3305,6 +3367,14 @@ ${JSON.stringify(payload, null, 1)}
   /* consApp = ganho conservador do recorte calculado pela aplicação: gaps sem sobreposição não passam dele, então passar indica dupla contagem */
   function htmlKpis(r, consApp) {
     const c = consolidar(r), tile = (rot, val, sub, cls = '') => `<div class="kpi"><div class="kpi-label"><span>${rot}</span></div><div class="kpi-value ${cls}">${val}</div><div class="kpi-sub">${sub}</div></div>`;
+    if (r.formato === 2) {   // um grupo por recomendação, sem sobreposição: a soma fecha com o Placar e com o Plano de ação
+      const pot = r.validos.reduce((a, i) => a + ((i.ganho_h_mes || {}).potencial || 0), 0), tot = U.ok(consApp) ? consApp : r.totalApp;
+      const cob = U.ok(tot) && Math.abs(c.cons - tot) < 0.5 ? tot : c.cons;   // soma de grupos arredondados: diferença de arredondamento não vira "405,2 de 405,0"
+      return `<div class="kpi-strip ia-kpis">${tile('Ganho coberto', `<span id="kpi-gaps-cons">${fmtG(cob)}</span><span class="kpi-un"> h/mês</span>`, U.ok(tot) && tot > 0 ? `${U.fmtPct(cob / tot, 0)} dos ${fmtG(tot)} h/mês do Placar · ≈ ${fmtG(c.fte)} FTE` : `≈ ${fmtG(c.fte)} FTE`)}
+        ${tile('Até a meta', `${fmtG(pot)}<span class="kpi-un"> h/mês</span>`, 'mesmos grupos no Plano de ação (com compensação dentro do grupo)')}
+        ${tile('Recomendações', U.fmtInt(r.validos.length), `${U.fmtInt(c.alta)} com confiança alta${r.descartados.length ? ` · ${U.fmtInt(r.descartados.length)} descartada(s)` : ''}${(r.faltando || []).length ? ` · ${U.fmtInt(r.faltando.length)} sem resposta` : ''}`)}
+        ${tile('Maior ganho', c.maior ? esc(c.maior.recorte.nome) : '—', c.maior ? `${fmtG(c.maior.ganho_h_mes.conservador)} h/mês · ${esc(ROT_TIPO[c.maior.tipo] || c.maior.tipo)}` : 'nenhum ganho', 'txt')}</div>`;
+    }
     const passa = U.ok(consApp) && c.cons > consApp + 0.05;
     return `<div class="kpi-strip ia-kpis">${tile('Ganho dos gaps', `${fmtG(c.cons)}<span class="kpi-un"> h/mês</span>`, passa ? `<span class="neg" title="Gaps sem sobreposição não passam o ganho conservador do recorte (${esc(fmtG(consApp))} h/mês): a IA somou grupos que se sobrepõem">passa os ${fmtG(consApp)} h/mês do recorte: sobreposição</span>` : 'conservador, soma sem gaps sobrepostos')}
       ${tile('Equivale a', `${fmtG(c.fte)}<span class="kpi-un"> FTE</span>`, 'ganho ÷ meta de cada grupo')}
@@ -3414,14 +3484,15 @@ ${JSON.stringify(payload, null, 1)}
     const sub = res && !g ? `${ult ? '<span class="pill pa">gerado para outro recorte</span> ' : ''}${esc(nomeModelo(res.modelo))} · ${esc(U.fmtDataHora(res.geradoEm))}` : `${esc(NOME_MODELO)} · só agregados, pessoas pseudonimizadas`;
     let corpo;
     if (g) corpo = `<div class="empty" style="padding:24px 12px"><h2 style="font-size:16px"><span class="spin"></span>Analisando o recorte…</h2><p id="ia-prog">${esc(progTxt())}</p></div>`;
-    else if (!res) corpo = `<div class="empty" style="padding:24px 12px"><p>A IA lê os agregados deste recorte e devolve até 10 gaps priorizados pelo ganho, com hipótese, ação e dono; cada número citado é conferido com o recorte.</p><div class="acts"><button class="btn p" data-click="ia" data-op="gerar">✦ Gerar recomendações</button></div></div>`;
+    else if (!res) corpo = `<div class="empty" style="padding:24px 12px"><p>Para cada ${esc(rotA)} com ganho, a IA aponta a alavanca que os números indicam (integração, revisão, CI, retrabalho, tamanho do lote, concentração) e uma ação com alvo numérico; cada número é conferido com o recorte.</p><div class="acts"><button class="btn p" data-click="ia" data-op="gerar">✦ Gerar recomendações</button></div></div>`;
     else {
-      const top = res.validos.slice().sort((a, b) => a.prioridade - b.prioridade).slice(0, 3), acoes = (res.acoes || []).slice(0, 3);
+      // formato 2: uma recomendação por grupo, já com a ação; a lista "Ações por squad" seria a mesma, então não se repete
+      const f2 = res.formato === 2, top = res.validos.slice().sort((a, b) => a.prioridade - b.prioridade).slice(0, 3), acoes = f2 ? [] : (res.acoes || []).slice(0, 3);
       const item = ins => { const v = ins.ganho_h_mes && U.ok(ins.ganho_h_mes.conservador) ? ins.ganho_h_mes.conservador : null;
-        return `<button class="rec-item" data-click="ia" data-op="verGap" data-p="${esc(ins.prioridade)}" title="${esc(ins.mensagem || ins.titulo)}"><span class="pg-n">${esc(ins.prioridade)}</span><span class="rec-txt"><b>${esc(ins.titulo)}</b><span class="mini">${esc(rotRecorte(ins.recorte))}</span></span><span class="rec-val">${v !== null ? `+${fmtG(v)} h/mês` : '<span class="nc">qualitativo</span>'} ${confPill(ins.confianca)}</span></button>`; };
+        return `<button class="rec-item" data-click="ia" data-op="verGap" data-p="${esc(ins.prioridade)}" title="${esc(ins.mensagem || ins.titulo)}"><span class="pg-n">${esc(ins.prioridade)}</span><span class="rec-txt"><b>${esc(f2 ? ins.acao : ins.titulo)}</b><span class="mini">${esc(rotRecorte(ins.recorte))}${f2 ? ` · ${esc(ROT_TIPO[ins.tipo] || ins.tipo)}` : ''}</span></span><span class="rec-val">${v !== null ? `+${fmtG(v)} h/mês` : '<span class="nc">qualitativo</span>'} ${confPill(ins.confianca)}</span></button>`; };
       const rotulo = (txt, k, link) => `<div class="rec-rot"><span class="ia-rot">${txt}</span><button class="btn-link" data-click="ia" data-op="irPagina" data-k="${k}">${link} ›</button></div>`;
       corpo = `<p class="ia-msg" style="margin-top:0"><b>${inline(res.resumo, X.nomes)}</b></p>
-        ${rotulo('Principais gaps · ganho conservador estimado', 3, `Ver os ${U.fmtInt(res.validos.length)} gaps`)}<div class="rec-lista">${top.map(item).join('') || '<div class="note">Nenhum gap passou na conferência dos números.</div>'}</div>
+        ${f2 ? rotulo(`Maiores ganhos · ação por ${esc(rotA)}`, 3, `Ver as ${U.fmtInt(res.validos.length)} recomendações`) : rotulo('Principais gaps · ganho conservador estimado', 3, `Ver os ${U.fmtInt(res.validos.length)} gaps`)}<div class="rec-lista">${top.map(item).join('') || '<div class="note">Nenhuma recomendação passou na conferência dos números.</div>'}</div>
         ${acoes.length ? `<div style="margin-top:12px">${rotulo(`Ações por ${esc(rotA)}`, 2, 'Ver o plano de ação')}</div><ul class="rec-acoes">${acoes.map(a => `<li><b>${esc(a.grupo)}</b>: ${esc(a.acao)} <span class="mini">· ${esc(a.dono)}</span></li>`).join('')}</ul>` : ''}`;
     }
     return `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Recomendações da IA</div><div class="card-sub">${sub}</div></div><div class="card-tools">${tools}</div></div><div class="card-body" style="overflow:auto">${corpo}</div></div>`;
@@ -3455,7 +3526,7 @@ ${JSON.stringify(payload, null, 1)}
         <td class="num">${f1(g.devsMes)}</td><td class="num">${f1(g.atual)}</td>${tdAtv(g)}<td class="num">${f1(g.meta)}</td>
         <td class="pl-bar"><div class="ia-bar"><i><span style="width:${U.ok(pct) ? Math.min(100, pct * 100) : 0}%;background:var(${naMeta ? '--ok' : '--primary'})"></span></i><b>${U.ok(pct) ? U.fmtPct(pct, 0) : '—'}</b></div></td>
         <td class="num">${g.gap > 0 ? '+' + f1(g.gap) : '—'}</td><td class="num"><b>${g.horasParaMeta > 0 ? U.fmtInt(g.horasParaMeta) : '—'}</b></td><td class="num">${g.horasParaMeta > 0 ? f1(fteDe(g)) : '—'}</td><td class="num">${U.fmtInt(g.detrator)}</td><td class="num">${(v => v > 0 ? U.fmtInt(v) : '—')(consG(g))}</td>
-        <td class="pl-acao">${naMeta ? '<span class="pos">na meta</span>' : a ? `${esc(a.acao)} <span class="mini">· ${esc(a.dono)}</span>` : `<span class="nc">${temIA ? 'sem sugestão' : 'use ✦ Sugerir ações'}</span>`}</td></tr>`; }).join('');
+        <td class="pl-acao">${a ? `${naMeta ? '<span class="pos">na meta</span> · ' : ''}${esc(a.acao)} <span class="mini">· ${esc(a.dono)}</span>` : naMeta ? '<span class="pos">na meta</span>' : `<span class="nc">${temIA ? 'sem sugestão' : 'use ✦ Sugerir ações'}</span>`}</td></tr>`; }).join('');
     return `<table class="tbl compacta ia-int quebra-th" id="pl-tab"><thead><tr><th>${esc(rot)}</th>${nivel === 'squad' ? '<th>Tribo</th>' : ''}<th class="num" title="desenvolvedores por mês, média dos meses completos">Devs/mês</th><th class="num" title="h/mês·dev nos meses completos">Realizado (h/mês·dev)</th>${thAtv}<th class="num" title="média da meta de cada dev, ponderada por dev-mês">Meta (h/mês·dev)</th><th>% da meta</th><th class="num" title="meta − realizado, em h/mês por dev">Falta por dev (h/mês)</th><th class="num" title="falta por dev × devs por mês">Horas/mês p/ meta</th><th class="num" title="horas/mês para a meta ÷ meta do grupo">FTE</th><th class="num">Detratores</th><th class="num" title="ganho conservador: detratores do grupo levados a ${esc(U.fmtNum(R.lim.det * 100, 0))}% da meta, em h/mês (sem compensação entre pessoas; é o número do placar)">Ganho cons. (h/mês)</th><th>Ação sugerida</th></tr></thead><tbody>${linhas}</tbody></table>`;
   }
   /* rótulo à direita da barra: horas e participação no ganho conservador, calculada sobre o valor sem arredondar (o mesmo do título) */
@@ -3503,7 +3574,7 @@ ${JSON.stringify(payload, null, 1)}
       : `${esc(NOME_MODELO)} · só agregados, pessoas pseudonimizadas`;
     let corpo;
     if (g) corpo = `<div class="empty"><h2><span class="spin"></span>Analisando o recorte…</h2><p id="ia-prog">${esc(progTxt())}</p></div>`;
-    else if (!res) corpo = `<div class="empty"><h2>Gaps de produtividade do recorte</h2><p>Até 10 gaps, priorizados pelo ganho, com cada número conferido.</p>
+    else if (!res) corpo = `<div class="empty"><h2>Gaps de produtividade do recorte</h2><p>Uma recomendação por grupo com ganho, no nível do Plano de ação: a alavanca, a ação com alvo numérico e o indicador; cada número é conferido.</p>
       <div class="acts"><button class="btn p" data-click="ia" data-op="gerar">✦ Gerar insights</button></div>${demo ? '<p class="mini" style="margin-top:10px">Dados demonstrativos (sintéticos).</p>' : ''}</div>`;
     else corpo = `<div class="ia-grid"><div class="fill-col"><div class="ia-filtros"><input type="search" data-input="ia" data-op="filtroQ" placeholder="Filtrar gap ou recorte…" value="${esc(S.filtro.q)}" aria-label="Filtrar insights">
         <select data-act="ia" data-op="filtroTipo" aria-label="Tipo"><option value="">Todos os tipos</option>${[...new Set(res.validos.map(i => i.tipo))].map(k => `<option value="${esc(k)}" ${S.filtro.tipo === k ? 'selected' : ''}>${esc(ROT_TIPO[k] || k)}</option>`).join('')}</select>
@@ -3516,16 +3587,20 @@ ${JSON.stringify(payload, null, 1)}
   }
   const g0 = r => r && { ...r, lacunas: r.lacunas || [], descartados: r.descartados || [], validos: r.validos || [] };
 
-  function metricaFmt(m) {
-    const c = String(m.campo || ''), v = m.valor; if (!U.ok(v)) return '—';
+  function fmtCampo(campo, v) {
+    const c = String(campo || ''); if (!U.ok(v)) return '—';
     if (/pct|share|variacao|razao|limiar/.test(c) && Math.abs(v) <= 10) return U.fmtPct(v, 1, /variacao/.test(c));
     if (/fte/.test(c)) return `${U.fmtNum(v, 1)} FTE`;
-    if (/h_mes|regua|ganho|mediana|p25|p75/.test(c)) return `${U.fmtNum(v, 1)} h/mês`;
+    if (/dispersao/.test(c)) return `${U.fmtNum(v, 1)}×`;
+    if (/horas_commit_por/.test(c)) return `${U.fmtNum(v, 1)} h`;
+    if (/linhas/.test(c)) return U.fmtInt(v);
+    if (/h_mes|regua|ganho|p25|p75/.test(c) && !/mediana/.test(c)) return `${U.fmtNum(v, 1)} h/mês`;
     return Number.isInteger(v) ? U.fmtInt(v) : U.fmtNum(v, 1);
   }
+  const metricaFmt = m => fmtCampo(m.campo, m.valor);
   function grupoDe(X, rec) {
     if (!rec) return null;
-    const dados = X.payload.grupos.find(g => g.nivel === rec.nivel && g.nome === rec.nome) || (rec.nivel === 'universo' && X.payload.grupos[0].nivel === 'universo' ? X.payload.grupos[0] : null);
+    const dados = X.payload.grupos.find(g => g.nivel === rec.nivel && g.nome === rec.nome) || (rec.nivel === 'universo' && X.payload.grupos[0] && X.payload.grupos[0].nivel === 'universo' ? X.payload.grupos[0] : null);
     return dados ? { dados, ids: X.idsGrupo.get(`${dados.nivel}|${dados.nome}`) } : null;
   }
   const ROT_CAT = { detrator: 'detratores', neutro: 'neutros', impulsionador: 'impulsionadores', semRegua: 'sem meta' };
@@ -3533,7 +3608,7 @@ ${JSON.stringify(payload, null, 1)}
     const g = ins.ganho_h_mes, grp = grupoDe(X, ins.recorte), d = grp && grp.dados, t = s => inline(s || '—', X.nomes);
     const comp = d ? [['detrator', d.detratores], ['neutro', d.neutros], ['impulsionador', d.impulsionadores], ['semRegua', d.sem_regua]].filter(([, n]) => n > 0) : [];
     const tot = comp.reduce((a, [, n]) => a + n, 0), corCat = k => k === 'semRegua' ? UI.COR.clara : UI.COR_CAT[k];
-    const met = ins.metricas || [];
+    const met = ins.metricas || [], comRef = met.some(m => m.referencia !== undefined);
     return `<div class="ia-det-hdr"><span class="pg-n">${esc(ins.prioridade)}</span><div><h3>${esc(ins.titulo)}</h3><div class="mini">${esc(ROT_TIPO[ins.tipo] || ins.tipo || '')} · ${esc(rotRecorte(ins.recorte))}</div></div></div>
       ${ins.mensagem ? `<p class="ia-msg">${t(ins.mensagem)}</p>` : ''}
       <div class="ia-chips">${g && U.ok(g.conservador) ? `<span class="chip on">+${fmtG(g.conservador)} h/mês${U.ok(g.fte_equivalente) ? ` · ${fmtG(g.fte_equivalente)} FTE` : ''}</span>` : '<span class="chip">ganho qualitativo</span>'}${confPill(ins.confianca)}${ins.motivo_confianca ? `<span class="mini">${esc(ins.motivo_confianca)}</span>` : ''}</div>
@@ -3541,10 +3616,13 @@ ${JSON.stringify(payload, null, 1)}
         <div class="legend"><div class="ld"><div class="ldot line" style="background:${PALETA()[0]}"></div>grupo</div><div class="ld"><div class="ldot line" style="background:${UI.COR.neutra}"></div>meta do grupo (mês a mês)</div><div class="ld mini">meses parciais ficam em branco</div></div></div>` : ''}
       ${tot ? `<div class="ia-bloco"><div class="ia-rot">Pessoas por classificação · ${U.fmtInt(tot)}</div><div class="ia-comp" role="img" aria-label="${comp.map(([k, n]) => `${ROT_CAT[k]} ${n}`).join(', ')}">${comp.map(([k, n]) => `<span style="flex:${n};background:${corCat(k)}" title="${ROT_CAT[k]}: ${n} (${U.fmtPct(n / tot, 0)})"></span>`).join('')}</div>
         <div class="legend">${comp.map(([k, n]) => `<div class="ld"><div class="ldot" style="background:${corCat(k)}"></div>${ROT_CAT[k]} <b>${n}</b> <span class="mini">${U.fmtPct(n / tot, 0)}</span></div>`).join('')}</div></div>` : ''}
-      ${met.length ? `<div class="ia-bloco"><div class="ia-rot">Números que sustentam</div><table class="tbl compacta ia-met ia-int"><thead><tr><th>Métrica</th><th class="num">Valor</th><th>Campo</th></tr></thead><tbody>${met.map(m => `<tr><td>${esc(m.rotulo)}</td><td class="num"><b>${metricaFmt(m)}</b></td><td class="sub" title="campo de origem no recorte">${esc(m.campo)}</td></tr>`).join('')}</tbody></table></div>`
+      ${met.length ? `<div class="ia-bloco"><div class="ia-rot">Números que sustentam</div><table class="tbl compacta ia-met ia-int"><thead><tr><th>Métrica</th><th class="num">${esc(rotNivelIns(ins))}</th>${comRef ? `<th class="num" title="${esc(X.payload.referencia_descricao || 'mediana dos grupos')}">Mediana</th>` : ''}<th>Campo</th></tr></thead><tbody>${met.map(m => `<tr><td>${esc(m.rotulo)}</td><td class="num"><b>${metricaFmt(m)}</b></td>${comRef ? `<td class="num">${U.ok(m.referencia) ? fmtCampo(m.campo, m.referencia) : '—'}</td>` : ''}<td class="sub" title="campo de origem no recorte">${esc(m.campo)}</td></tr>`).join('')}</tbody></table></div>`
         : ins.evidencia ? `<div class="ia-bloco"><div class="ia-rot">Evidência</div><div class="mini">${t(ins.evidencia)}</div></div>` : ''}
-      <div class="ia-bloco"><div class="ia-rot">Ação${ins.dono ? ` · ${esc(ins.dono)}` : ''}</div><div class="ia-acao">${t(ins.acao || ins.acao_recomendada)}</div>${ins.dado_para_confirmar ? `<div class="mini">Antes, confirmar: ${t(ins.dado_para_confirmar)}</div>` : ''}</div>
-      <details class="ia-hip"><summary>Hipóteses</summary><div><b>Provável:</b> ${t(ins.hipotese_causa)}</div><div><b>Alternativa:</b> ${t(ins.hipotese_alternativa)}</div></details>
+      <div class="ia-bloco"><div class="ia-rot">Ação${ins.dono ? ` · ${esc(ins.dono)}` : ''}</div><div class="ia-acao">${t(ins.acao || ins.acao_recomendada)}</div>
+        ${ins.indicador && ins.indicador.campo ? `<div class="mini">Indicador de sucesso: <b>${esc(ROT_CAMPO[ins.indicador.campo] || ins.indicador.campo)}</b> → ${esc(fmtCampo(ins.indicador.campo, ins.indicador.alvo))}${d && U.ok(d[ins.indicador.campo]) ? ` (hoje ${esc(fmtCampo(ins.indicador.campo, d[ins.indicador.campo]))})` : ''}</div>` : ''}
+        ${ins.dado_para_confirmar ? `<div class="mini">Antes, confirmar: ${t(ins.dado_para_confirmar)}</div>` : ''}</div>
+      ${ins.hipotese_causa ? `<details class="ia-hip"><summary>Hipóteses</summary><div><b>Provável:</b> ${t(ins.hipotese_causa)}</div><div><b>Alternativa:</b> ${t(ins.hipotese_alternativa)}</div></details>`
+        : ins.hipotese_alternativa ? `<div class="mini" style="margin-top:6px"><b>Explicação alternativa:</b> ${t(ins.hipotese_alternativa)}</div>` : ''}
       ${(ins.sobreposicao_com || []).length ? `<div class="mini" style="margin-top:6px">Sobrepõe #${ins.sobreposicao_com.join(', #')}: não somar os ganhos.</div>` : ''}
       ${ins._falhas ? `<div class="mini neg" style="margin-top:6px">Sem correspondência no recorte: ${ins._falhas.map(fmtFalha).join(', ')}</div>` : ''}`;
   }
@@ -3649,9 +3727,12 @@ ${JSON.stringify(payload, null, 1)}
 
   function exportar() {
     const X = recorteIA(), r = resultadoPara(X.assinatura) || (App.projeto.ia && App.projeto.ia.ultimo); if (!r) return;
-    const cab = ['Prioridade', 'Tipo', 'Recorte', 'Gap', 'Mensagem', 'Números que sustentam', 'Ganho conservador (h/mês)', 'Ganho potencial (h/mês)', 'FTE equivalente', 'Sobreposição com', 'Ação', 'Dono', 'Confirmar antes', 'Causa provável', 'Explicação alternativa', 'Confiança', 'Motivo da confiança'];
-    const linha = ins => { const g = ins.ganho_h_mes || {}; return [ins.prioridade, ROT_TIPO[ins.tipo] || ins.tipo, rotRecorte(ins.recorte), ins.titulo, ins.mensagem || '', (ins.metricas || []).map(m => `${m.rotulo}: ${metricaFmt(m)} (${m.campo})`).join(' | ') || ins.evidencia || '',
-      g.conservador ?? null, g.potencial ?? null, g.fte_equivalente ?? null, (ins.sobreposicao_com || []).join(', '), ins.acao || ins.acao_recomendada || '', ins.dono || '', ins.dado_para_confirmar, ins.hipotese_causa, ins.hipotese_alternativa, ins.confianca, ins.motivo_confianca]; };
+    const f2 = r.formato === 2;
+    const cab = ['Prioridade', f2 ? 'Alavanca' : 'Tipo', 'Recorte', f2 ? 'Recomendação' : 'Gap', f2 ? 'Diagnóstico' : 'Mensagem', 'Números que sustentam', 'Ganho conservador (h/mês)', f2 ? 'Horas até a meta (h/mês)' : 'Ganho potencial (h/mês)', 'FTE equivalente', 'Sobreposição com', 'Ação', 'Indicador de sucesso', 'Dono', 'Confirmar antes', 'Causa provável', 'Explicação alternativa', 'Confiança', 'Motivo da confiança'];
+    const linha = ins => { const g = ins.ganho_h_mes || {}, ind = ins.indicador; return [ins.prioridade, ROT_TIPO[ins.tipo] || ins.tipo, rotRecorte(ins.recorte), ins.titulo, ins.mensagem || '',
+      (ins.metricas || []).map(m => `${m.rotulo}: ${metricaFmt(m)}${U.ok(m.referencia) ? ` (mediana ${fmtCampo(m.campo, m.referencia)})` : ''} (${m.campo})`).join(' | ') || ins.evidencia || '',
+      g.conservador ?? null, g.potencial ?? null, g.fte_equivalente ?? null, (ins.sobreposicao_com || []).join(', '), ins.acao || ins.acao_recomendada || '', ind && ind.campo ? `${ROT_CAMPO[ind.campo] || ind.campo} → ${fmtCampo(ind.campo, ind.alvo)}` : '',
+      ins.dono || '', ins.dado_para_confirmar, ins.hipotese_causa, ins.hipotese_alternativa, ins.confianca, ins.motivo_confianca]; };
     const wb = XLSX.utils.book_new();
     const meta = [['Insights de produtividade (IA) — Análise de desenvolvimento'], [], ['Projeto', App.projeto.nome], ['Recorte', r.desc], ['Gerado em', U.fmtDataHora(r.geradoEm)], ['Modelo', nomeModelo(r.modelo)],
       ['Mensagem principal', r.resumo], ['Lacunas de dados', (r.lacunas || []).join(' | ')], ['Conferência', `${r.validos.length} de ${r.total} insight(s) com todos os números encontrados no recorte enviado`],
@@ -3688,7 +3769,7 @@ ${JSON.stringify(payload, null, 1)}
   }
   document.addEventListener('keydown', e => { if (e.target && e.target.id === 'ia-pergunta' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviar(e.target.value); } });
 
-  return { render, acao, montar, validar, numerosTexto, md, SCHEMA, ativarTabelas, estado: () => S };
+  return { render, acao, montar, validar, resultadoDe, guardar, numerosTexto, md, SCHEMA, SISTEMA_INSIGHTS, mensagemDados, ativarTabelas, estado: () => S };
 })();
 </script>
 <script>'use strict';
@@ -4134,6 +4215,22 @@ const App = (() => {
         irPagina('ia', 2);
         ok(document.querySelectorAll('#pl-tab tbody tr').length === pl.length && txt('pa-lead').includes(U.fmtInt(pot)) && semRolagem(), 'Plano de ação: uma linha por squad e o mesmo total do placar, sem rolagem', `${document.querySelectorAll('#pl-tab tbody tr').length} vs ${pl.length} · ${txt('pa-lead')}`);
         ok(/Realizado \(h\/mês·dev\)/.test(document.querySelector('#pl-tab thead').textContent) && /Falta por dev \(h\/mês\)/.test(document.querySelector('#pl-tab thead').textContent), 'Plano de ação: unidade no cabeçalho das colunas de horas');
+        { // recomendações da IA: um nível só, os números do Placar e do Plano, e a conferência que descarta ação genérica e evidência falsa
+          const Rr = UI.recorte(), X = IA.montar(Rr), P = X.payload, gs = P.grupos, somaG = gs.reduce((a, g) => a + g.ganho_conservador_h_mes, 0);
+          irPagina('ia', 1); const consPl = parseInt(txt('kpi-cons'), 10); irPagina('ia', 2);
+          const pPed = Calc.planoMeta(A.ctx, Rr.rowsUniv, Rr.universo, Rr.meses, Rr.status, Rr.lim, Rr.attrs, Rr.cls, 'squad').find(g => g.nome === 'Pedidos'), gPed = gs.find(g => g.nome === 'Pedidos');
+          ok(new Set(gs.map(g => g.nivel)).size === 1 && gs[0].nivel === 'squad' && Math.round(P.totais.ganho_conservador_h_mes) === consPl && Math.abs(somaG - P.totais.ganho_conservador_h_mes) < 0.5
+            && gPed && gPed.realizado_h_mes_dev === Math.round(pPed.atual * 10) / 10 && Array.isArray(gPed.sinais),
+            'IA: grupos de um nível só (squad), ganho total igual ao do Placar e soma dos grupos igual ao total; realizado igual ao do Plano', `${[...new Set(gs.map(g => g.nivel))]} · ${P.totais.ganho_conservador_h_mes} vs ${consPl} · Σ ${U.round(somaG, 1)}`);
+          const g1 = gs.find(g => g.sinais.length), s = g1 && g1.sinais[0], f = (c, v) => /pct|share/.test(c) ? U.fmtPct(v, 0) : U.fmtNum(v, 1), outro = gs.filter(g => g !== g1);
+          const bom = s && { grupo: g1.nome, alavanca: 'retrabalho', titulo: 'Sinal acima da mediana', diagnostico: `${f(s.campo, s.valor)} contra ${f(s.campo, s.referencia)} na mediana`, evidencias: [{ campo: s.campo, rotulo: 'sinal', valor: s.valor, referencia: s.referencia }],
+            acao: `Mudar o processo do squad: de ${f(s.campo, s.valor)} para ${f(s.campo, s.referencia)}`, indicador: { campo: s.campo, alvo: s.referencia }, dono: 'tech lead', hipotese_alternativa: 'x', dado_para_confirmar: 'x', confianca: 'media', motivo_confianca: 'x' };
+          const vr = bom && outro.length >= 2 ? IA.validar({ recomendacoes: [bom, { ...bom, grupo: outro[0].nome, acao: 'Investigar a queda trimestral' }, { ...bom, grupo: outro[1].nome, evidencias: [{ ...bom.evidencias[0], valor: s.valor + 7.3 }] }] }, P) : null;
+          const rd = bom ? IA.resultadoDe({ mensagem_principal: 'Ganho de 9.876,5 h/mês', recomendacoes: [bom], lacunas_de_dados: [] }, X) : null;
+          ok(vr && vr.validos.length === 1 && vr.descartados.length === 2 && vr.descartados[0]._falhas.includes('ação genérica') && vr.validos[0].ganho_h_mes.conservador === g1.ganho_conservador_h_mes
+            && rd.formato === 2 && rd.acoes.length === 1 && rd.acoes[0].grupo === g1.nome && !/9\.876/.test(rd.resumo) && rd.resumo.includes(U.fmtNum(P.totais.ganho_conservador_h_mes, 1)),
+            'IA: a conferência aceita a ação com alvo da referência, descarta a genérica e a evidência que não é do grupo; o ganho e a ação do plano vêm da aplicação; mensagem com número falso é trocada',
+            JSON.stringify(vr && { v: vr.validos.length, d: vr.descartados.map(x => x._falhas), resumo: rd && rd.resumo })); }
         abrirDetalhe('squad', 'Pedidos'); voltar();
         ok(A.abaAtiva === 'ia' && A.pagina.ia === 2, 'Voltar do detalhamento retorna à tela de origem (Oportunidade › Plano de ação)'); }
       irPara('geral'); irPagina('geral', 1);
