@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<meta name="versao" content="v5.0 (piloto) · 02/10/2026">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Análise de desenvolvimento — Gradus</title>
 <meta name="description" content="Camada de análise para os resultados da ferramenta offline de estimativa de horas por commit. Processamento local; só as recomendações de IA enviam agregados pseudonimizados à API da Anthropic.">
@@ -350,6 +351,11 @@ th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--text)}
 .pg-secao{font-size:12.5px;font-weight:600;color:var(--text3)}
 .pg-lead{font-size:19px;line-height:1.3;font-weight:600;color:var(--text-strong);margin-top:1px}
 .pg-sub{font-size:12.5px;color:var(--text2);margin-top:2px}
+.pg-bloco{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 22px;margin:4px 0 2px;font-size:13px;color:var(--text2)}
+.pg-bloco b{font-size:19px;font-weight:700;color:var(--text-strong);margin-right:3px;font-variant-numeric:tabular-nums}
+.pg-bloco .m{color:var(--text3);font-size:12.5px}
+.pg-bloco.ia-destaque{display:block;font-size:14px;line-height:1.45;font-weight:500;color:var(--text-strong);background:var(--primary-soft);border-left:3px solid var(--primary);border-radius:var(--r);padding:8px 12px;max-width:1100px}
+.pg-bloco.ia-destaque b{font-size:inherit;margin:0}
 .trilha{font-weight:600;color:var(--text)}
 .trilha-sep{color:var(--text3);font-weight:400;white-space:pre}
 .trilha-vinc{font-weight:500;color:var(--text2)}
@@ -367,6 +373,7 @@ th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--text)}
 .rec-item .pg-n{background:var(--primary-btn);color:#fff}
 .rec-txt{min-width:0;display:flex;flex-direction:column}.rec-txt b,.rec-txt .mini{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rec-val{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.rec-item.det-rec{grid-template-columns:minmax(0,1fr) auto}.det-rec .rec-txt b,.det-rec .rec-txt .mini{white-space:normal}
 .rec-acoes{margin:0 0 0 18px;font-size:13px;line-height:1.5}.rec-acoes li+li{margin-top:3px}
 .rec-rot{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}.rec-rot .ia-rot{margin-bottom:0}
 @media(max-width:960px){.placar-grid{grid-template-columns:1fr}}
@@ -507,7 +514,6 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 </main>
 
 <div id="toasts" aria-live="polite"></div>
-<footer class="wm">Gradus Consultoria · processamento local no navegador; só as recomendações de IA enviam dados, agregados e com pessoas pseudonimizadas, à API da Anthropic · <span id="rodape-versao">v3.0 (piloto) · 02/10/2026</span></footer>
 
 <script>'use strict';
 /* Utilitários: formatação PT-BR, datas sem fuso (tudo em componentes UTC),
@@ -1768,9 +1774,12 @@ const UI = (() => {
   const artQ = R => ({ 0.25: 'o P25', 0.5: 'a mediana', 0.75: 'o P75' })[R.ctx.metas.percentil], pelaQ = R => ({ 0.25: 'pelo P25', 0.5: 'pela mediana', 0.75: 'pelo P75' })[R.ctx.metas.percentil];
   /* cabeçalho de página: seção, a mensagem (título que conclui; HTML já escapado) e o escopo; ferramentas à direita.
      idLead é único por seção: seções inativas guardam o HTML anterior, e um id repetido acharia o elemento velho */
-  function pageHdr(secao, lead, sub, tools, idLead, trilha = null) {
+  /* lead vazio: sem título (os números já estão nos cartões); bloco = o lead é HTML formatado (números em destaque, mensagem
+     da IA), não uma frase corrida */
+  function pageHdr(secao, lead, sub, tools, idLead, trilha = null, bloco = false) {
     const s = trilha ? `${trilha.html}${sub ? ' · ' + sub : ''}` : sub;
-    return `<div class="pg-hdr"><div><div class="pg-secao">${esc(secao)}</div><h1 class="pg-lead" id="${idLead}">${lead}</h1>${s ? `<div class="pg-sub">${s}</div>` : ''}</div>${tools ? `<div class="card-tools">${tools}</div>` : ''}</div>`;
+    const l = !lead ? '' : bloco ? `<div class="pg-bloco${typeof bloco === 'string' ? ' ' + bloco : ''}" id="${idLead}">${lead}</div>` : `<h1 class="pg-lead" id="${idLead}">${lead}</h1>`;
+    return `<div class="pg-hdr"><div><div class="pg-secao">${esc(secao)}</div>${l}${s ? `<div class="pg-sub">${s}</div>` : ''}</div>${tools ? `<div class="card-tools">${tools}</div>` : ''}</div>`;
   }
   /* ── hierarquia Empresa › Tribo › Squad: o squad (ou a tribo) sempre aparece com os níveis de cima ── */
   const PLURAL_NIV = { empresa: 'empresas', tribo: 'tribos', squad: 'squads' };
@@ -1918,12 +1927,12 @@ const UI = (() => {
     const R = recorte(), an = R.an, ctx = R.ctx, pg = Math.min(3, Math.max(1, App.pagina.geral || 1)), per = esc(perMeses(R.meses)), tri = trilhaOrg(R);
     // cada página: título que conclui (preenchido depois do cálculo), escopo no subtítulo (com a trilha empresa › tribo › squad), método e fonte no rodapé
     let corpo = '';
-    if (pg === 1) corpo = pageHdr('Diagnóstico · Evolução', '', `${per} · horas estimadas líquidas por desenvolvedor no mês, contra a meta da tribo de cada um`, '', 'ev-lead', tri) + `<div class="kpi-strip" id="kpis"></div>
+    if (pg === 1) corpo = pageHdr('Diagnóstico · Evolução', '', per, '', 'ev-lead', tri) + `<div class="kpi-strip" id="kpis"></div>
       <div class="card fill"><div class="card-hdr"><div class="legend" id="ch-evolucao-leg"></div>
         <div class="card-tools"><div class="seg"><button data-click="evolucaoModo" data-k="horas" class="${an.evolucaoModo !== 'categorias' ? 'on' : ''}">Horas por desenvolvedor</button><button data-click="evolucaoModo" data-k="categorias" class="${an.evolucaoModo === 'categorias' ? 'on' : ''}">Detratores / impulsionadores</button></div>
         <button class="btn s xs" data-click="expSerie">Exportar série</button></div></div>
         <div class="card-body"><div class="chart-wrap fill"><canvas id="ch-evolucao" role="img" aria-label="Evolução mensal"></canvas></div></div></div>${pgNota('', 'ch-evolucao-sub')}`;
-    else if (pg === 2) corpo = pageHdr('Diagnóstico · Detratores e impulsionadores', '', `${per} · produtividade de cada pessoa ÷ meta da tribo dela · ${esc(descLim(R))}`,
+    else if (pg === 2) corpo = pageHdr('Diagnóstico · Detratores e impulsionadores', '', `${per} · ${esc(descLim(R))}`,
         `<button class="btn s xs" data-click="irMetas" title="Janela da meta por tribo e mês">Definir metas</button><button class="btn s xs" data-click="expClassificacao">Exportar classificação</button>`, 'cl-lead', tri)
       + `<div class="card fill"><div class="card-body"><div class="grid-2 fill grid-cat"><div class="fill-col"><div class="legend" id="ch-cat-leg"></div><div class="chart-wrap fill"><canvas id="ch-cat" role="img" aria-label="Classificação por grupo"></canvas></div></div><div class="fill-col" id="cat-tribos"></div></div></div></div>${pgNota('', 'ch-cat-sub')}`;
     else corpo = pageHdr('Diagnóstico · Tabela', '', '<span id="tbl-sub"></span>', `<div class="seg" id="seg-agrup">${Object.keys(AGRUP).map(k => { const off = Calc.AGRUP_ATRIB.includes(k) && !ctx.camposPessoa[k]; return `<button data-click="agrup" data-k="${k}" class="${an.agrupamento === k ? 'on' : ''}" ${off ? `disabled title="Sem ${AGRUP[k].toLowerCase()} nos dados cadastrais"` : ''}>${AGRUP[k]}</button>`; }).join('')}</div>
@@ -2020,8 +2029,6 @@ const UI = (() => {
   /* serie = série mensal do gráfico (horas e desenvolvedores por mês) para que o cartão e as barras usem a mesma base */
   function renderKpis(R, serie) {
     const { meses, obs, attrs, criterios, p, status } = R, box = U.el('kpis');
-    const parciais = meses.filter(y => status.get(y) === 'parcial'), semDados = meses.filter(y => !status.has(y) || status.get(y) === 'sem-dados');
-    const notaMes = (parciais.length ? `<span class="m">· ${parciais.map(U.fmtMes).join(', ')} com cobertura parcial</span>` : '') + (semDados.length ? `<span class="m">· ${semDados.map(U.fmtMes).join(', ')} sem dados</span>` : '');
     // h/mês por dev do período = horas dos meses completos ÷ desenvolvedores-mês dos mesmos meses
     const s = serie || R.serie;
     const comp = s.filter(x => status.get(x.ym) === 'completo'), devMes = comp.reduce((a, x) => a + x.devs, 0);
@@ -2033,8 +2040,7 @@ const UI = (() => {
     const k1 = `<div class="kpi b"><div class="kpi-label"><span>Produtividade</span><span>meta: ${esc(descMeta(R))}</span></div>
         <div class="kpi-value" id="kpi-entrega"><span id="kpi-entrega-dev" title="${esc(comp.length ? `horas de ${perMeses(comp.map(x => x.ym))} ÷ ${U.fmtInt(devMes)} desenvolvedores-mês` : 'sem mês completo no período')}">${fmtHD(hDev)}</span></div>
         <div class="kpi-sub" title="meta de cada dev = meta da tribo dele; média ponderada por dev-mês nos meses completos">${pctM === null ? 'sem meta calculável no período'
-          : `<b id="kpi-meta-pct" class="${pctM >= 1 ? 'pos' : 'neg'}">${U.fmtPct(pctM, 0)}</b> da meta de <b id="kpi-meta">${U.fmtNum(mp, 1)} h/mês·dev</b> · ${pctM >= 1 ? 'meta atingida' : `faltam <b>${U.fmtNum(mp - hDev, 1)}</b>`}`}
-          <span class="m">· só meses completos</span> ${notaMes}${atvC ? `<br><span id="kpi-atv" title="atividades fora do commit nos meses completos ÷ desenvolvedores-mês: não entram na produtividade nem na meta">+ <b>${U.fmtNum(atvC.total / devMes, 1)}</b> h/mês·dev fora do commit <span class="m">(${esc(txtAtv(atvC, devMes, ''))})</span></span>` : ''}</div></div>`;
+          : `<b id="kpi-meta-pct" class="${pctM >= 1 ? 'pos' : 'neg'}">${U.fmtPct(pctM, 0)}</b> da meta de <b id="kpi-meta">${U.fmtNum(mp, 1)} h/mês·dev</b>${pctM >= 1 ? '' : ` · faltam <b>${U.fmtNum(mp - hDev, 1)}</b>`}`}${atvC ? `<br><span id="kpi-atv" title="atividades fora do commit nos meses completos ÷ desenvolvedores-mês: não entram na produtividade nem na meta">+ <b>${U.fmtNum(atvC.total / devMes, 1)}</b> h/mês·dev fora do commit <span class="m">(${esc(txtAtv(atvC, devMes, ''))})</span></span>` : ''}</div></div>`;
     const v = Calc.variacao(serieValorDev(R, R.rowsSP, new Set(R.pessoasIds)), R.f.mesIni, R.f.mesFim, status, R.janela);
     const k2 = kpiVar(v, R.janela, true, 'dev');
     let k3;
@@ -2050,7 +2056,7 @@ const UI = (() => {
         <div class="kpi-cap kpi-tag">${esc(nomeRef(R))}${R.an.modo === 'segmentada' ? ' (nenhum critério ativo)' : ''}</div>
         ${em.n ? `<div class="kpi-value" id="kpi-ref-dev">${fmtHD(em.mediana)}</div><div class="kpi-range"><span>P25 <b>${f1(em.p25)}</b></span><span>P75 <b>${f1(em.p75)}</b></span></div>`
           : '<div class="kpi-value small">Sem referência para este recorte</div>'}</div>
-        <div class="kpi-sub" title="${esc(`por mês: ${R.mesesCompletos ? `÷ ${U.fmtInt(R.mesesCompletos)} mês(es) completo(s)` : 'sem mês completo no período'}`)}">n = <b>${U.fmtInt(e.n)}</b> pessoa(s) <span class="m">· descreve ${nomeRef(R) === 'Referência do universo' ? 'o universo' : 'as pessoas do recorte'}, não pares equivalentes</span></div></div>`;
+        <div class="kpi-sub" title="${esc(`por mês: ${R.mesesCompletos ? `÷ ${U.fmtInt(R.mesesCompletos)} mês(es) completo(s)` : 'sem mês completo no período'}`)}">n = <b>${U.fmtInt(e.n)}</b> pessoas</div></div>`;
     }
     box.innerHTML = k1 + k2 + k3;
     const lead = U.el('ev-lead'); if (lead) lead.textContent = leadEvolucao(R, s, v);
@@ -2072,7 +2078,7 @@ const UI = (() => {
     const titulo = (janela === 'mes' ? 'Variação mensal' : janela === 'tri' ? 'Variação trimestral' : 'Variação do período') + (unidade === 'dev' ? ' · h/mês por dev' : ' · h/mês');
     const seletor = comSeletor ? `<span class="seg mini-seg">${['mes', 'tri', 'periodo'].map(j => `<button data-click="janela" data-k="${j}" class="${janela === j ? 'on' : ''}" title="${esc(Calc.JANELAS[j])}">${j === 'mes' ? 'Mês' : j === 'tri' ? '3 meses' : 'Período'}</button>`).join('')}</span>` : `<span>${esc(Calc.JANELAS[janela])}</span>`;
     return `<div class="kpi a"><div class="kpi-label"><span>${titulo}</span>${seletor}</div><div class="kpi-value ${cls}" id="kpi-var">${val}</div>
-      <div class="kpi-sub">${v.variacao === null ? esc(v.motivo) + (v.mesesAtual && v.mesesAtual.length ? ` <span class="m">· janela: ${perMeses(v.mesesAtual)}</span>` : '') : `<b>${perMeses(v.mesesAtual)}</b> (${fmtV(v.atual, v.mesesAtual.length)}) vs <b>${perMeses(v.mesesAnt)}</b> (${fmtV(v.anterior, v.mesesAnt.length)})`} <span class="m" title="${unidade === 'dev' ? 'horas da janela ÷ desenvolvedores-mês, como no gráfico' : ''}">· só meses completos</span></div></div>`;
+      <div class="kpi-sub">${v.variacao === null ? esc(v.motivo) + (v.mesesAtual && v.mesesAtual.length ? ` <span class="m">· janela: ${perMeses(v.mesesAtual)}</span>` : '') : `<b>${perMeses(v.mesesAtual)}</b> (${fmtV(v.atual, v.mesesAtual.length)}) vs <b>${perMeses(v.mesesAnt)}</b> (${fmtV(v.anterior, v.mesesAnt.length)})`}</div></div>`;
   }
 
   /* plugin: tabela abaixo do eixo x, uma linha por métrica, alinhada a cada mês */
@@ -2093,19 +2099,18 @@ const UI = (() => {
     const { meses, an, status } = R, sub = U.el(ids.sub), leg = U.el(ids.leg);
     const rotulos = meses.map(y => U.fmtMes(y) + (status.get(y) === 'parcial' ? '*' : ''));
     const parciais = meses.filter(y => status.get(y) === 'parcial');
-    const notaParcial = parciais.length ? ` · * cobertura parcial (${parciais.map(y => `${U.fmtMes(y)}: ${(R.faltantes.get(y) || []).length} repositório(s) sem cobertura completa`).join('; ')})` : '';
+    const notaParcial = parciais.length ? ' · * mês com cobertura parcial' : '';
     const s = dados || R.serie;
     const modo = an.evolucaoModo === 'categorias' ? 'categorias' : 'horas';
     const tabela = [['Qtd. de devs', s.map(x => x.devs), v => U.fmtInt(v)]];
     const layout = { padding: { top: modo === 'horas' ? 22 : 0, left: 66, bottom: tabela.length * 18 + 4 } };   // à esquerda cabe o rótulo da tabela
     const escalas = extra => ({ x: { stacked: modo === 'categorias', grid: { display: false }, border: { display: false }, ticks: { padding: 6 } },
       y: { stacked: modo === 'categorias', beginAtZero: true, grid: { color: COR.grade, drawTicks: false }, border: { display: false }, ticks: { padding: 6, ...(extra || {}) } } });
-    const legTab = '<div class="ld mini">· abaixo do eixo: quantidade de desenvolvedores no mês</div>';
+    // texto só com o essencial: a meta e o aviso de mês parcial (a legenda e a linha "Qtd. de devs" explicam o resto)
     if (modo === 'horas') {
-      sub.textContent = `horas estimadas líquidas por desenvolvedor no mês (horas do mês ÷ desenvolvedores do mês) · meta = média da meta de cada dev do mês (${descMeta(R)})` + notaParcial;
+      sub.textContent = `meta: ${descMeta(R)}` + notaParcial;
       const comAtv = R.temAtv, am = comAtv ? Calc.atvPorMes(atvRows || R.atv) : null;
-      if (comAtv) sub.textContent += ' · suporte hachurado (÷ os mesmos devs); valor de cada parcela na barra e total da coluna acima; a meta compara só os commits';
-      leg.innerHTML = legHoras(comAtv ? 'commits (h/mês·dev)' : 'horas líquidas por desenvolvedor (h/mês·dev)', comAtv) + `<div class="ld"><div class="ldot line" style="background:${COR.meta}"></div>meta de produtividade${comAtv ? ' (só commits)' : ''}</div>` + legTab;
+      leg.innerHTML = legHoras(comAtv ? 'commits (h/mês·dev)' : 'horas líquidas por desenvolvedor (h/mês·dev)', comAtv) + `<div class="ld"><div class="ldot line" style="background:${COR.meta}"></div>meta de produtividade${comAtv ? ' (só commits)' : ''}</div>`;
       const linhaMeta = { type: 'line', label: 'Meta', stack: 'meta', data: s.map(x => U.ok(x.meta) ? U.round(x.meta, 2) : null), borderColor: COR.meta, backgroundColor: COR.meta, pointBorderColor: COR.fundo, pointBorderWidth: 1.5,
         borderWidth: 2.5, borderDash: [7, 4], pointRadius: 3.5, pointHoverRadius: 5, tension: 0, order: 0 };
       const vals = s.map(x => { const v = { commits: x.horasPorDev === null ? null : U.round(x.horasPorDev, 2) }, a = am && am.get(x.ym); Calc.TIPOS_ATV.forEach(t => v[t] = a && x.devs ? a[t] / x.devs : 0); return v; });
@@ -2117,8 +2122,8 @@ const UI = (() => {
       if (comAtv) o.plugins.tooltip.callbacks.footer = rodapeSuporte(' por dev');
       chart(ids.barras, { type: 'bar', plugins: [rotulosBarra, tabelaEixo(tabela)], data: { labels: rotulos, datasets: [...barras, linhaMeta] }, options: o });
     } else {
-      sub.textContent = `desenvolvedores por categoria em cada mês: horas da pessoa no mês ÷ meta da tribo dela no mês (${descMeta(R)}) · ${descLim(R)} · meses parciais ficam sem meta · rótulo = desenvolvedores (% do mês)` + notaParcial;
-      leg.innerHTML = Calc.CATEGORIAS.map(c => `<div class="ld"><div class="ldot" style="background:${COR_CAT[c]}"></div>${Calc.ROTULO_CAT[c].toLowerCase()}</div>`).join('') + (s.some(x => x.semRegua) ? `<div class="ld"><div class="ldot" style="background:${COR.clara}"></div>sem meta</div>` : '') + legTab;
+      sub.textContent = descLim(R) + notaParcial;
+      leg.innerHTML = Calc.CATEGORIAS.map(c => `<div class="ld"><div class="ldot" style="background:${COR_CAT[c]}"></div>${Calc.ROTULO_CAT[c].toLowerCase()}</div>`).join('') + (s.some(x => x.semRegua) ? `<div class="ld"><div class="ldot" style="background:${COR.clara}"></div>sem meta</div>` : '');
       const totais = s.map(x => x.devs);
       chart(ids.barras, { type: 'bar', plugins: [rotulosSegmento, tabelaEixo(tabela)], data: { labels: rotulos, datasets: [
         ...Calc.CATEGORIAS.map(c => ({ label: Calc.ROTULO_CAT[c], data: s.map(x => x[c]), backgroundColor: COR_CAT[c], borderWidth: 1, borderColor: COR.fundo, stack: 's', barPercentage: 0.66, categoryPercentage: 0.8, order: 1, _totais: totais })),
@@ -2150,7 +2155,7 @@ const UI = (() => {
     const cls = [...R.cls.pessoas.entries()].filter(([id]) => emAnalise.has(id));
     const nivel = nivelClassificacao(R), rotNivel = nivel ? Calc.ROTULO_CRIT[nivel] : 'Grupo';
     U.el('ch-cat-sub').textContent = R.mesesCompletos
-      ? `barras por ${rotNivel.toLowerCase()}${nivel && DICA_NIVEL[nivel] ? ` (${DICA_NIVEL[nivel]})` : ''} · meta de cada pessoa = meta da tribo dela (${descMeta(R)}), média dos meses completos de ${perMeses(R.meses)}; tribo com menos de ${Calc.MIN_TRIBO} pessoas usa ${artQ(R)} da base inteira · pessoa = produtividade em ${perMeses(R.meses)} · ${descLim(R)}${!R.ctx.camposPessoa.tribo ? ` · sem tribo nos dados cadastrais: todos ${pelaQ(R)} da base inteira` : ''}`
+      ? `meta: ${descMeta(R)}${nivel && DICA_NIVEL[nivel] ? ` · ${DICA_NIVEL[nivel]}` : ''}${!R.ctx.camposPessoa.tribo ? ` · sem tribo nos dados cadastrais: meta ${pelaQ(R)} da base inteira` : ''}`
       : `sem classificação: o período ${perMeses(R.meses)} não tem mês completo.`;
     const grupos = new Map(); const novo = () => ({ n: 0, detrator: 0, neutro: 0, impulsionador: 0, semRegua: 0, reguas: [], universo: false, sem: false, somaProd: 0, atv: Calc.zeroAtv() });
     const todas = novo();
@@ -2171,7 +2176,7 @@ const UI = (() => {
     const reguaTxt = g => { const u = [...new Set(g.reguas.map(v => Math.round(v * 10) / 10))].sort((a, b) => a - b); return !u.length ? '—' : u.length === 1 ? U.fmtNum(u[0], 1) : `${U.fmtNum(u[0], 1)}–${U.fmtNum(u[u.length - 1], 1)}`; };
     const ds = c => ({ label: Calc.ROTULO_CAT[c] || 'Sem meta', data: reg.map(g => g[c]), backgroundColor: COR_CAT[c] || COR.clara, borderWidth: 1, borderColor: COR.fundo, stack: 's', barPercentage: 0.7, categoryPercentage: 0.8, maxBarThickness: 140, _totais: totais });
     const cats = Calc.CATEGORIAS.concat(reg.some(g => g.semRegua) ? ['semRegua'] : []);
-    U.el('ch-cat-leg').innerHTML = cats.map(c => `<div class="ld"><div class="ldot" style="background:${COR_CAT[c] || COR.clara}"></div>${(Calc.ROTULO_CAT[c] || 'sem meta').toLowerCase()}</div>`).join('') + '<div class="ld mini">· rótulo = desenvolvedores (% da barra)</div>';
+    U.el('ch-cat-leg').innerHTML = cats.map(c => `<div class="ld"><div class="ldot" style="background:${COR_CAT[c] || COR.clara}"></div>${(Calc.ROTULO_CAT[c] || 'sem meta').toLowerCase()}</div>`).join('');
     chart('ch-cat', { type: 'bar', plugins: [rotulosSegmento], data: { labels, datasets: cats.map(ds) },
       options: { ...opts(v => U.fmtInt(v), c => `${c.dataset.label}: ${U.fmtInt(c.raw)} de ${U.fmtInt(totais[c.dataIndex])} (${U.fmtPct(totais[c.dataIndex] ? c.raw / totais[c.dataIndex] : 0, 0)})`),
         scales: { x: { stacked: true, grid: { display: false }, border: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { color: COR.grade, drawTicks: false }, border: { display: false }, ticks: { precision: 0 } } } } });
@@ -2188,7 +2193,7 @@ const UI = (() => {
     const atvTh = !atvP ? '' : Calc.TIPOS_ATV.map(k => `<th class="num" title="${esc(`${Calc.ROTULO_ATV[k]} (fora do commit), h/mês·dev: horas dos meses completos ÷ desenvolvedores-mês; não entra na classificação`)}">${esc(Calc.ROTULO_ATV_CURTO[k])}</th>`).join('');
     box.innerHTML = `<div class="tbl-wrap fill" id="cat-wrap"><table class="tbl compacta" data-nivel="${nivel || ''}"><thead><tr><th>${esc(rotNivel)}</th><th class="num" title="Realizado do grupo em ${esc(perMeses(R.meses))}: horas dos meses completos ÷ desenvolvedores-mês (o mesmo número do Plano de ação, do Placar e da Evolução)">H/mês·dev</th>${atvTh}<th class="num" title="Meta (h/mês): percentil da tribo de cada pessoa, média dos meses completos; faixa quando o grupo reúne metas diferentes">Meta</th><th class="num">Pessoas</th><th class="num"><span class="cat detrator">Detr.</span></th><th class="num"><span class="cat neutro">Neutros</span></th><th class="num"><span class="cat impulsionador">Impuls.</span></th></tr></thead><tbody></tbody>
       <tfoot><tr><td>Total</td><td class="num">${mediaTxt(todas)}</td>${atvTd(todas)}<td class="num">${reguaTxt({ reguas: cls.map(([, x]) => x.regua).filter(U.ok) })}</td><td class="num">${U.fmtInt(todas.n)}</td>${cel(todas, 'detrator')}${cel(todas, 'neutro')}${cel(todas, 'impulsionador')}</tr></tfoot></table></div><div class="pag-slot" id="cat-pag"></div>
-      <div class="mini">H/mês·dev do grupo = horas ÷ desenvolvedores-mês, como no Plano de ação. A classificação é por pessoa: produtividade (horas líquidas ÷ meses completos; quem está no cadastro sem commits entra com zero) ÷ meta. Meta marcada com * inclui pessoas avaliadas ${pelaQ(R)} da base inteira (sem tribo ou tribo com menos de ${Calc.MIN_TRIBO} pessoas). Indício para investigação, não avaliação de desempenho.</div>`;
+      ${linhas.some(([, g]) => g.universo) ? `<div class="mini">* inclui pessoas avaliadas ${pelaQ(R)} da base inteira (sem tribo ou tribo com menos de ${Calc.MIN_TRIBO} pessoas)</div>` : ''}`;
     const por = linhasQueCabem('cat-wrap', ROW_TBL), pg = paginar('cat-' + (nivel || 'todos'), linhas.length, por);
     box.querySelector('tbody').innerHTML = linhas.slice(pg.ini, pg.fim).map(([t, g]) => `<tr><td>${esc(t)}</td><td class="num">${mediaTxt(g)}</td>${atvTd(g)}<td class="num">${reguaTxt(g)}${g.universo ? ' *' : ''}</td><td class="num">${U.fmtInt(g.n)}</td>${cel(g, 'detrator')}${cel(g, 'neutro')}${cel(g, 'impulsionador')}</tr>`).join('');
     U.el('cat-pag').innerHTML = pg.html;
@@ -2228,8 +2233,7 @@ const UI = (() => {
 
   function renderTabela(R) {
     const { ctx } = R, { ag, linhas } = linhasTabela(R), body = U.el('tbl-body'), mc = R.mesesCompletos;
-    U.el('tbl-titulo').textContent = `Resumo por ${AGRUP[ag].toLowerCase()}: ${U.fmtInt(linhas.length)} ${AGRUP_PL[ag]}, ${mc ? `${U.fmtNum(linhas.reduce((s, l) => s + l.liq, 0) / mc, 1)} h/mês` : 'sem mês completo'} em ${perMeses(R.meses)}`;
-    U.el('tbl-sub').textContent = `horas/mês = horas líquidas ÷ ${U.fmtInt(mc)} mês(es) completo(s) · referência: ${nomeRef(R)} · clique numa linha para detalhar`;
+    U.el('tbl-sub').textContent = `referência: ${nomeRef(R)}`;
     App.tabelaAtual = { ag, linhas };
     const comAtv = R.temAtv, semStack = ag === 'stack', paisT = paisNoRecorte(R, ag);   // squad → tribo, tribo → empresa, ao lado do nome
     const thAtv = comAtv ? Calc.TIPOS_ATV.map(t => `<th class="num" title="${esc(`${Calc.ROTULO_ATV[t]} (fora do commit): horas ÷ meses completos do período${semStack ? ' · atividades não têm stack' : ''}`)}">${esc(Calc.ROTULO_ATV[t])}/mês</th>`).join('') : '';
@@ -2252,7 +2256,7 @@ const UI = (() => {
     const tfAtv = !comAtv ? '' : Calc.TIPOS_ATV.map(t => `<td class="num">${semStack ? nc() : mc ? U.fmtNum(totAtv[t] / mc, 1) : nc()}</td>`).join('');
     body.innerHTML = `<div class="tbl-wrap fill" id="tbl-wrap"><table class="tbl" id="tbl-grupos" data-total="${linhas.length}"><thead>${th}</thead><tbody></tbody>
       <tfoot><tr><td>Total do recorte · ${U.fmtInt(linhas.length)} ${AGRUP_PL[ag]}</td><td class="num">${mc ? U.fmtNum(tot / mc, 1) : nc()}</td>${tfAtv}<td></td><td></td>${ag === 'autor' ? '<td></td>' : ''}</tr></tfoot></table></div><div class="pag-slot" id="tbl-pag"></div>
-      <div class="mini">${esc(fonteTxt())}. Nota: ${ag === 'autor' ? (R.colorir ? 'Distância colorida: pares definidos por critérios explícitos.' : 'Distância em cor neutra: referência descritiva do universo, não uma comparação entre pessoas equivalentes.') : `${AGRUP[ag]} de cada commit = ${ag === 'repo' || ag === 'stack' ? 'o do próprio commit' : `${AGRUP[ag].toLowerCase()} da pessoa vigente na data do commit`}.`}${R.temAtv ? ' Revisão, integração e reexecução de CI são atividades fora do commit: aparecem ao lado das horas e não entram na classificação.' : ''}</div>`;
+      <div class="mini">${esc(fonteTxt())}</div>`;
     const pg = paginar('tabela-' + ag, linhas.length, linhasQueCabem('tbl-wrap', ROW_TBL));
     body.querySelector('tbody').innerHTML = linhas.slice(pg.ini, pg.fim).map(tr).join('');
     U.el('tbl-pag').innerHTML = pg.html;
@@ -2278,7 +2282,7 @@ const UI = (() => {
       ${htmlMes(R, 'det-mesIni', 'mesIni')}${htmlMes(R, 'det-mesFim', 'mesFim')}
       ${dropFiltro(R, 'empresa')}${dropFiltro(R, 'tribo')}${dropFiltro(R, 'squad')}
       <button class="btn s xs" data-click="voltar" title="Volta para a tela de onde o detalhamento foi aberto">← Voltar</button>
-      <span class="recorte">período ${U.fmtMes(R.f.mesIni)} a ${U.fmtMes(R.f.mesFim)} (o mesmo das outras telas)${outros.length ? ` · também filtrado por ${esc(outros.join('; '))}` : ''} · ${esc(nomeRef(R))}</span></div></div>`;
+      ${outros.length ? `<span class="recorte">também filtrado por ${esc(outros.join('; '))}</span>` : ''}</div></div>`;
     if (!d || d.chave === null) { sec.innerHTML = `<div class="pagina">${seletor}<div class="empty">${aviso ? `<div class="note box warn" style="max-width:640px;margin:0 auto 12px;text-align:left">${esc(aviso)}</div>` : ''}<p>Escolha uma pessoa, squad, tribo, empresa, repositório ou stack acima, ou clique num grupo do placar ou numa linha da tabela do diagnóstico.</p></div></div>`; return; }
     const { tipo, chave } = d;
     const rows = R.rowsUniv.filter(r => Calc.chaveGrupo(r, tipo) === chave), rowsSP = R.rowsUnivSP.filter(r => Calc.chaveGrupo(r, tipo) === chave);
@@ -2293,21 +2297,21 @@ const UI = (() => {
       if (pes.aliases.size) attrsHtml.push(`<span class="chip muted" title="${esc([...pes.aliases].join(', '))}">${pes.aliases.size} identificador(es) git</span>`);
     } else attrsHtml.push(...chipsHierarquia(R, tipo, chave, rows));   // squad, tribo ou empresa: a que pertence e o que tem dentro
     const liq = Calc.somaLiq(rows), totalUniv = Calc.somaLiq(R.rowsUniv), share = totalUniv > 0 ? liq / totalUniv : null;
-    const cabecalho = `<div class="det-hdr"><div><div class="mini">${esc(AGRUP[tipo])}</div><h2>${esc(nome)}</h2><div class="attrs">${attrsHtml.join('')}</div></div><div class="mini">${R.mesesCompletos ? `${U.fmtNum(liq / R.mesesCompletos, 1)} h/mês` : 'sem mês completo'} · ${U.fmtInt(rows.length)} commits${tipo !== 'autor' ? ` · ${U.fmtInt(pessoas.length)} pessoa(s)` : ''}</div></div>`;
+    const cabecalho = `<div class="det-hdr"><div><div class="mini">${esc(AGRUP[tipo])}</div><h2>${esc(nome)}</h2><div class="attrs">${attrsHtml.join('')}</div></div>${tipo !== 'autor' ? `<div class="mini">${U.fmtInt(pessoas.length)} ${pessoas.length === 1 ? 'pessoa' : 'pessoas'}</div>` : ''}</div>`;
     let corpo = '';
     if (pg === 1) {
       const v = Calc.variacao(serieValor(rowsSP), R.f.mesIni, R.f.mesFim, status, R.janela), ret = rows.filter(r => r.retrabalho).length, cAutor = tipo === 'autor' ? R.cls.pessoas.get(chave) : null, mcD = R.mesesCompletos;
       corpo = cabecalho + `<div class="kpi-strip">
-        <div class="kpi b"><div class="kpi-label"><span>Entrega estimada</span><span>média mensal</span></div><div class="kpi-value">${mcD ? `${U.fmtNum(liq / mcD, 1)}${un(' h/mês')}` : '<span class="kpi-value small">sem mês completo</span>'}</div><div class="kpi-sub">${U.fmtInt(rows.length)} commits${ret ? ` · ${U.fmtInt(ret)} de retrabalho já zerados` : ''} <span class="m">· horas do período ÷ ${U.fmtInt(mcD)} mês(es) completo(s)</span>${R.temAtv ? `<br>+ <b>${tipo === 'stack' || !mcD ? '—' : U.fmtNum(atvS.total / mcD, 1)}</b> h/mês fora do commit <span class="m">(${tipo === 'stack' ? 'atividades não têm stack' : esc(txtAtv(atvS, mcD || 1, ''))})</span>` : ''}</div></div>
+        <div class="kpi b"><div class="kpi-label"><span>Entrega estimada</span><span>média mensal</span></div><div class="kpi-value">${mcD ? `${U.fmtNum(liq / mcD, 1)}${un(' h/mês')}` : '<span class="kpi-value small">sem mês completo</span>'}</div><div class="kpi-sub">${U.fmtInt(rows.length)} commits${ret ? ` · ${U.fmtInt(ret)} de retrabalho já zerados` : ''}${R.temAtv ? `<br>+ <b>${tipo === 'stack' || !mcD ? '—' : U.fmtNum(atvS.total / mcD, 1)}</b> h/mês fora do commit <span class="m">(${tipo === 'stack' ? 'atividades não têm stack' : esc(txtAtv(atvS, mcD || 1, ''))})</span>` : ''}</div></div>
         ${kpiVar(v, R.janela, false)}
         ${cAutor ? `<div class="kpi ${cAutor.categoria === 'impulsionador' ? 't' : cAutor.categoria === 'detrator' ? 'a' : ''}"><div class="kpi-label"><span>Classificação</span><span>meta ${cAutor.base === 'tribo' ? 'da tribo' : 'da base inteira'}</span></div><div class="kpi-value">${catHtml(cAutor.categoria).replace('class="cat', 'style="font-size:20px" class="cat')}</div><div class="kpi-sub">${cAutor.razao === null ? 'sem meta' : `${fmtProd(cAutor.valor)} = ${U.fmtPct(cAutor.razao, 0)} da meta (${fmtProd(cAutor.regua)}${cAutor.base === 'tribo' ? ', tribo ' + esc(cAutor.tribo) : ''}, ${descMeta(R)})`}</div></div>` : ''}
-        <div class="kpi t"><div class="kpi-label"><span>Participação no recorte</span></div><div class="kpi-value">${share === null ? '<span class="kpi-value small">Não calculável</span>' : U.fmtPct(share, 1)}</div><div class="kpi-sub">das horas líquidas do universo do recorte</div></div></div>
+        <div class="kpi t"><div class="kpi-label"><span>Participação no recorte</span></div><div class="kpi-value">${share === null ? '<span class="kpi-value small">Não calculável</span>' : U.fmtPct(share, 1)}</div><div class="kpi-sub">das horas do recorte</div></div></div>
         <div class="grid-2 fill det-resumo"><div class="card fill"><div class="card-hdr"><div><div class="card-title">Evolução mensal</div><div class="card-sub" id="cd-sub"></div></div>${tipo !== 'autor' ? `<div class="card-tools"><div class="seg"><button data-click="evolucaoModo" data-k="horas" class="${R.an.evolucaoModo !== 'categorias' ? 'on' : ''}">h/dev</button><button data-click="evolucaoModo" data-k="categorias" class="${R.an.evolucaoModo === 'categorias' ? 'on' : ''}">Categorias</button></div></div>` : ''}</div><div class="card-body"><div class="legend" id="cd-leg"></div><div class="chart-wrap fill"><canvas id="cd-evolucao"></canvas></div></div></div>
         <div class="card fill"><div class="card-hdr"><div><div class="card-title" id="det-ref-tit">Comparação com a referência</div><div class="card-sub" id="det-ref-sub">${esc(nomeRef(R))}</div></div></div><div class="card-body" id="det-ref"></div></div></div>`;
     } else if (pg === 2) {
       corpo = cabecalho + `<div class="${tipo !== 'autor' ? 'grid-3' : 'grid-2'} fill"><div class="card fill"><div class="card-hdr"><div><div class="card-title">Composição por repositório</div></div></div><div class="card-body" id="det-repo"></div></div>
         <div class="card fill"><div class="card-hdr"><div><div class="card-title">Composição por stack</div></div></div><div class="card-body" id="det-stack"></div></div>
-        ${tipo !== 'autor' ? `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Pessoas</div><div class="card-sub">participação nas horas deste ${AGRUP[tipo].toLowerCase()}</div></div></div><div class="card-body" id="det-pessoas"></div></div>` : ''}</div>`;
+        ${tipo !== 'autor' ? `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Pessoas</div></div></div><div class="card-body" id="det-pessoas"></div></div>` : ''}</div>`;
     } else {
       const cds = cardsDetalhe(R, tipo, chave, rows), st = estadoTab('cc-commits'), sk = estadoTab('cc-cards');
       App.detalheCards = cds;
@@ -2352,7 +2356,7 @@ const UI = (() => {
     const vals = s.map(x => { const v = { commits: U.round(x.liq, 2) }, a = am && am.get(x.ym); Calc.TIPOS_ATV.forEach(t => v[t] = a ? a[t] : 0); return v; });
     const tabela = [['Commits', s.map(x => x.commits), v => U.fmtInt(v)]];
     if (cards && R.ctx.temCards) { const pm = new Map(); cards.lista.forEach(c => c.meses.forEach(m => pm.set(m, (pm.get(m) || 0) + 1))); tabela.push(['Cards', meses.map(y => pm.get(y) || 0), v => U.fmtInt(v)]); }
-    U.el(ids.sub).textContent = `horas estimadas líquidas por mês${R.temAtv ? ' · suporte hachurado; valor de cada parcela na barra e total da coluna acima' : ''} · * cobertura parcial${tabela.length > 1 ? ' · abaixo do eixo: commits e cards movimentados no mês' : ' · abaixo do eixo: commits no mês'}`;
+    U.el(ids.sub).textContent = R.meses.some(y => R.status.get(y) === 'parcial') ? '* mês com cobertura parcial' : '';
     U.el(ids.sub).title = U.el(ids.sub).textContent;
     U.el(ids.leg).innerHTML = legHoras(R.temAtv ? 'commits (h/mês)' : 'horas líquidas (h/mês)', R.temAtv);
     const esc2 = { x: { stacked: R.temAtv, grid: { display: false }, border: { display: false }, ticks: { padding: 6 } }, y: { stacked: R.temAtv, beginAtZero: true, grid: { color: COR.grade, drawTicks: false }, border: { display: false }, ticks: { padding: 6, callback: v => U.fmtNum(v, 0) } } };
@@ -2401,10 +2405,10 @@ const UI = (() => {
       + contagem('Commits', y => D.total.meses.get(y).commits, D.media(D.total.tot).commits) + (cards && ctx.temCards ? contagem('Cards movimentados', y => cardsMes.get(y) || 0, D.mc ? somaCards / D.mc : null) : '');
     wrap.innerHTML = D.lista.length ? `<table class="tbl compacta cm-tbl"><thead>${thead}</thead><tbody>${corpo}</tbody><tfoot>${pe}</tfoot></table>` : '<div class="note" style="padding:10px">Sem commits no período.</div>';
     // sem atividades na base (ou no recorte de stack), a coluna fica vazia e o motivo vem primeiro no subtítulo
-    const semAtv = tipo === 'stack' ? 'atividades de MR não têm stack: revisão e integração ficam vazias · '
-      : !R.temAtv ? 'a base importada não tem atividades de MR (aba Histórico de atividades ou Atividades fora do commit): revisão e integração ficam vazias · ' : '';
+    const semAtv = tipo === 'stack' ? 'atividades de MR não têm stack: revisão e integração ficam vazias'
+      : !R.temAtv ? 'a base não tem atividades de MR: revisão e integração ficam vazias' : '';
     const sub = U.el('cc-sub');
-    sub.textContent = `${semAtv}horas estimadas · Commit = horas líquidas dos commits · Revisão e integração = revisão + integração + reexecução de CI, fora da meta · * cobertura parcial${tipo !== 'autor' ? ' · clique no nome para detalhar' : ''}`;
+    sub.textContent = [semAtv, R.meses.some(y => R.status.get(y) === 'parcial') ? '* mês com cobertura parcial' : ''].filter(Boolean).join(' · ');
     sub.title = sub.textContent;
   }
 
@@ -2513,15 +2517,16 @@ const UI = (() => {
     const lista = (porTribo ? pl.filter(g => g.tribo === cur.tribo) : pl).filter(g => g === cur || U.ok(g.pctMeta)).sort((a, b) => (b.pctMeta ?? -1) - (a.pctMeta ?? -1));
     const rotPl = PLURAL_NIV[tipo], fem = tipo !== 'squad', nomeG = g => nomeGrupo(R, tipo, g.nome || '(sem)'), f1 = v => U.ok(v) ? U.fmtNum(v, 1) : '—';
     U.el('det-ref-tit').textContent = porTribo ? `Posição na tribo ${cur.tribo}` : `Comparação com ${fem ? 'as outras' : 'os outros'} ${rotPl}`;
-    U.el('det-ref-sub').textContent = `${porTribo ? `squads da tribo ${cur.tribo}` : `${rotPl} do recorte`} · realizado e meta como no Plano de ação`;
-    if (!cur || !U.ok(cur.pctMeta)) { box.innerHTML = '<div class="note">Sem meta calculável para este grupo no período.</div>'; return; }
+    U.el('det-ref-sub').textContent = '';
+    const rec = typeof IA !== 'undefined' && IA.htmlRecDetalhe ? IA.htmlRecDetalhe(tipo, chave) : '';   // a recomendação da IA para este squad, se já gerada
+    if (!cur || !U.ok(cur.pctMeta)) { box.innerHTML = '<div class="note">Sem meta calculável para este grupo no período.</div>' + rec; return; }
     const pos = lista.indexOf(cur) + 1, so = lista.length === 1;
     const resumo = so ? `${fem ? `Única ${Calc.ROTULO_CRIT[tipo].toLowerCase()}` : 'Único squad'} ${porTribo ? `da tribo ${cur.tribo}` : 'do recorte'} com meta no período${(R.f[tipo] || []).length ? `: o filtro de ${Calc.ROTULO_CRIT[tipo].toLowerCase()} deixa só ${fem ? 'ela' : 'ele'}; limpe-o para comparar` : ''}.`
-      : `${nomeG(cur)} ${fem ? 'é a' : 'é o'} ${pos}${fem ? 'ª' : 'º'} de ${lista.length} em % da meta.`;
+      : '';   // com mais de um grupo, a ordem e o destaque da tabela já mostram a posição
     const linha = g => { const atual = g === cur, pct = g.pctMeta;
       return `<tr class="${atual ? 'atual' : 'click'}" ${atual ? `aria-current="true" title="${esc(nomeG(g))} · em detalhe"` : `data-click="detalhe" data-tipo="${tipo}" data-k="${esc(g.nome || '(sem)')}" title="${esc(nomeG(g))} · abrir o detalhamento"`}><td>${esc(nomeG(g))}</td><td class="num">${f1(g.atual)}</td><td class="num">${f1(g.meta)}</td>
         <td class="pos-bar"><div class="ia-bar"><i><span style="width:${U.ok(pct) ? Math.min(100, pct * 100) : 0}%;background:var(${U.ok(pct) && pct >= 1 ? '--ok' : '--primary'})"></span></i><b>${U.ok(pct) ? U.fmtPct(pct, 0) : '—'}</b></div></td><td class="num">${U.fmtInt(g.detrator)}</td></tr>`; };
-    box.innerHTML = `<div class="mini" style="margin-bottom:6px">${esc(resumo)}</div><div class="tbl-wrap" style="flex:1;min-height:0;overflow:auto"><table class="tbl compacta comp quebra-th" id="det-pos"><thead><tr><th>${esc(AGRUP[tipo])}</th><th class="num">Realizado (h/mês·dev)</th><th class="num">Meta (h/mês·dev)</th><th>% da meta</th><th class="num">Detratores</th></tr></thead><tbody>${lista.map(linha).join('')}</tbody></table></div>`;
+    box.innerHTML = `${resumo ? `<div class="mini" style="margin-bottom:6px">${esc(resumo)}</div>` : ''}<div class="tbl-wrap" style="flex:0 1 auto;min-height:0;overflow:auto"><table class="tbl compacta comp quebra-th" id="det-pos"><thead><tr><th>${esc(AGRUP[tipo])}</th><th class="num">Realizado (h/mês·dev)</th><th class="num">Meta (h/mês·dev)</th><th>% da meta</th><th class="num">Detratores</th></tr></thead><tbody>${lista.map(linha).join('')}</tbody></table></div>${rec}`;
   }
   function renderDetRef(R, tipo, chave) {
     const { ctx, obs, attrs, criterios, p } = R, box = U.el('det-ref');
@@ -2535,7 +2540,7 @@ const UI = (() => {
     const dist = ref.motivo ? null : Calc.distancia(valor, ref.mediana);
     const posicao = ref.motivo || !U.ok(valor) ? '' : valor < ref.p25 ? 'abaixo da faixa P25–P75' : valor > ref.p75 ? 'acima da faixa P25–P75' : 'dentro da faixa P25–P75';
     const linha = (rot, f) => `<div class="ref-box"><div><div class="l">Este valor${rot}</div><div class="v">${U.ok(valor) ? f(valor) : '—'}</div></div><div><div class="l">Mediana${rot}</div><div class="v">${f(ref.mediana)}</div></div><div><div class="l">P25${rot}</div><div class="v">${f(ref.p25)}</div></div><div><div class="l">P75${rot}</div><div class="v">${f(ref.p75)}</div></div><div><div class="l">Distância</div><div class="v">${dist === null ? '—' : fmtDelta(dist, R.colorir)}</div></div></div>`;
-    box.innerHTML = `<dl class="kv"><dt>Grupo</dt><dd>${esc(nomeRef(R))}</dd><dt>Critérios</dt><dd>${esc(grupoDesc)}</dd><dt>Integrantes</dt><dd>${U.fmtInt(ref.pares ? ref.pares.length : 0)} pessoa(s), excluída a própria</dd><dt>Métrica</dt><dd>horas estimadas líquidas por mês: horas de ${esc(perMeses(R.meses))} ÷ ${U.fmtInt(mc)} mês(es) completo(s)</dd></dl>
+    box.innerHTML = `<dl class="kv"><dt>Grupo</dt><dd>${esc(nomeRef(R))}</dd><dt>Critérios</dt><dd>${esc(grupoDesc)}</dd><dt>Integrantes</dt><dd>${U.fmtInt(ref.pares ? ref.pares.length : 0)} pessoa(s), excluída a própria</dd></dl>
       ${ref.motivo ? `<div class="note box warn" style="margin-top:10px"><b>${esc(ref.motivo)}</b>${criterios.length ? ' Amplie ou remova critérios (ou ajuste o período) para obter referência; nada é relaxado automaticamente.' : ''}</div>`
         : mc ? `<div class="mini" style="margin:4px 0 2px;font-weight:700">Por mês (h/mês)</div>` + linha('', v => U.ok(v) ? U.fmtNum(v / mc, 1) : '—') + `<div class="mini">${esc(posicao)}</div>`
         : '<div class="mini">sem mês completo no período: a média mensal não é calculável</div>'}`;
@@ -2556,7 +2561,7 @@ const UI = (() => {
       return `<td class="num" title="${esc(det)}">${tot ? porMes(tot) : nc('0')}</td>`;
     };
     box.innerHTML = `<div class="tbl-wrap fill" id="${boxId}-wrap"><table class="tbl comp${atv ? ' compacta comp-atv' : ''}"><thead><tr><th>${rotulo}</th><th class="num" title="horas líquidas do período ÷ ${U.fmtInt(mc)} mês(es) completo(s)">${atv ? 'Commits (h/mês)' : 'Horas/mês'}</th>${atv ? '<th class="num" title="revisão, integração e reexecução de CI (fora do commit): horas do período ÷ meses completos">Revisão e integração (h/mês)</th>' : ''}<th class="num">Participação</th></tr></thead><tbody></tbody></table></div><div class="pag-slot" id="${boxId}-pag"></div>
-      ${part.length > 1 ? `<div class="mini">${n} maiores: ${conc.share === null ? 'não calculável' : U.fmtPct(conc.share, 1)} das horas${atv ? ' de commits · participação só sobre commits' : ''}</div>` : ''}${!atv && App.ctx.temAtv && rotulo === 'Stack' ? '<div class="mini">Atividades fora do commit não têm stack.</div>' : ''}`;
+      ${part.length > 1 ? `<div class="mini">${n} maiores: ${conc.share === null ? 'não calculável' : U.fmtPct(conc.share, 1)} das horas</div>` : ''}${!atv && App.ctx.temAtv && rotulo === 'Stack' ? '<div class="mini">Atividades fora do commit não têm stack.</div>' : ''}`;
     const pg = paginar(boxId, part.length, linhasQueCabem(boxId + '-wrap', ROW_TBL));
     box.querySelector('tbody').innerHTML = part.slice(pg.ini, pg.fim).map(x => `<tr ${x.clique ? `class="click" ${x.clique}` : ''}><td title="${esc(comNome ? x.nome : x.chave)}">${esc(comNome ? x.nome : rotulo === 'Repositório' ? nomeRepo(x.chave) : x.chave)}</td><td class="num" title="${esc(`${U.fmtInt(x.commits)} commits no período`)}">${porMes(x.liq)}</td>${tdA(x)}<td class="num">${x.share === null ? nc() : `<span class="bar" style="width:${Math.round(x.share * 60)}px"></span>${U.fmtPct(x.share, 1)}`}</td></tr>`).join('');
     U.el(boxId + '-pag').innerHTML = pg.html;
@@ -2968,7 +2973,7 @@ Uma frase com o total do recorte (totais.ganho_conservador_h_mes) e a alavanca q
 Ex.: "As 897 h/mês de ganho concentram-se em integração e revisão, a alavanca de 6 dos 10 squads".
 
 ## Formato
-Português do Brasil, telegráfico, números no formato pt-BR (1.234,5). titulo: até 8 palavras, nomeando a alavanca e o
+Português do Brasil, telegráfico, números no formato pt-BR (1.234,5). Chame o ganho de "ganho estimado". titulo: até 8 palavras, nomeando a alavanca e o
 sinal. diagnostico: até 25. acao: até 20. hipotese_alternativa e dado_para_confirmar: até 15. motivo_confianca: até 10.
 evidencias: 1 a 3 itens copiados dos "sinais" do grupo (campo, valor do grupo, referência). indicador: o campo que
 comprova o resultado e o alvo (o valor de referência). lacunas_de_dados: no máximo 3, até 12 palavras cada.
@@ -3225,7 +3230,7 @@ ${JSON.stringify(payload, null, 1)}
     const acoes = validos.map(v => ({ grupo: v.recorte.nome, acao: v.acao, dono: v.dono, prioridade: v.confianca }));
     const msg = String(obj.mensagem_principal || ''), okMsg = msg && !numerosTexto(msg).some(n => !bate(n, valoresDe(p)));
     const rot = p.meta.nivel === 'universo' ? 'grupo' : p.meta.nivel, n = p.grupos.length;
-    const resumo = okMsg ? msg : `${fmtG(p.totais.ganho_conservador_h_mes)} h/mês de ganho conservador em ${U.fmtInt(n)} ${rot}${n === 1 ? '' : 's'} abaixo da meta`;
+    const resumo = okMsg ? msg : `${fmtG(p.totais.ganho_conservador_h_mes)} h/mês de ganho estimado em ${U.fmtInt(n)} ${rot}${n === 1 ? '' : 's'} abaixo da meta`;
     return { formato: 2, assinatura: X.assinatura, desc: X.desc, geradoEm: U.hojeISO(), modelo: MODELO, uso, resumo, validos, descartados, faltando, acoes,
       lacunas: obj.lacunas_de_dados || [], total: (obj.recomendacoes || []).length, totalApp: p.totais.ganho_conservador_h_mes, metaApp: p.totais.horas_para_meta_soma_grupos };
   }
@@ -3371,12 +3376,12 @@ ${JSON.stringify(payload, null, 1)}
       const pot = r.validos.reduce((a, i) => a + ((i.ganho_h_mes || {}).potencial || 0), 0), tot = U.ok(consApp) ? consApp : r.totalApp;
       const cob = U.ok(tot) && Math.abs(c.cons - tot) < 0.5 ? tot : c.cons;   // soma de grupos arredondados: diferença de arredondamento não vira "405,2 de 405,0"
       return `<div class="kpi-strip ia-kpis">${tile('Ganho coberto', `<span id="kpi-gaps-cons">${fmtG(cob)}</span><span class="kpi-un"> h/mês</span>`, U.ok(tot) && tot > 0 ? `${U.fmtPct(cob / tot, 0)} dos ${fmtG(tot)} h/mês do Placar · ≈ ${fmtG(c.fte)} FTE` : `≈ ${fmtG(c.fte)} FTE`)}
-        ${tile('Até a meta', `${fmtG(pot)}<span class="kpi-un"> h/mês</span>`, 'mesmos grupos no Plano de ação (com compensação dentro do grupo)')}
+        ${tile('Até a meta', `${fmtG(pot)}<span class="kpi-un"> h/mês</span>`, 'no Plano de ação, para os mesmos grupos')}
         ${tile('Recomendações', U.fmtInt(r.validos.length), `${U.fmtInt(c.alta)} com confiança alta${r.descartados.length ? ` · ${U.fmtInt(r.descartados.length)} descartada(s)` : ''}${(r.faltando || []).length ? ` · ${U.fmtInt(r.faltando.length)} sem resposta` : ''}`)}
         ${tile('Maior ganho', c.maior ? esc(c.maior.recorte.nome) : '—', c.maior ? `${fmtG(c.maior.ganho_h_mes.conservador)} h/mês · ${esc(ROT_TIPO[c.maior.tipo] || c.maior.tipo)}` : 'nenhum ganho', 'txt')}</div>`;
     }
     const passa = U.ok(consApp) && c.cons > consApp + 0.05;
-    return `<div class="kpi-strip ia-kpis">${tile('Ganho dos gaps', `${fmtG(c.cons)}<span class="kpi-un"> h/mês</span>`, passa ? `<span class="neg" title="Gaps sem sobreposição não passam o ganho conservador do recorte (${esc(fmtG(consApp))} h/mês): a IA somou grupos que se sobrepõem">passa os ${fmtG(consApp)} h/mês do recorte: sobreposição</span>` : 'conservador, soma sem gaps sobrepostos')}
+    return `<div class="kpi-strip ia-kpis">${tile('Ganho dos gaps', `${fmtG(c.cons)}<span class="kpi-un"> h/mês</span>`, passa ? `<span class="neg" title="Gaps sem sobreposição não passam o ganho conservador do recorte (${esc(fmtG(consApp))} h/mês): a IA somou grupos que se sobrepõem">passa os ${fmtG(consApp)} h/mês do recorte: sobreposição</span>` : 'estimado, soma sem gaps sobrepostos')}
       ${tile('Equivale a', `${fmtG(c.fte)}<span class="kpi-un"> FTE</span>`, 'ganho ÷ meta de cada grupo')}
       ${tile('Gaps', U.fmtInt(r.validos.length), `${U.fmtInt(c.alta)} com confiança alta${r.descartados.length ? ` · ${U.fmtInt(r.descartados.length)} descartado(s)` : ''}`)}
       ${tile('Maior gap', c.maior ? esc(c.maior.recorte.nome) : '—', c.maior ? `${fmtG(c.maior.ganho_h_mes.conservador)} h/mês · ${esc(c.maior.titulo)}` : 'nenhum gap quantificado', 'txt')}</div>`;
@@ -3456,7 +3461,7 @@ ${JSON.stringify(payload, null, 1)}
     const sub = `${esc(X.descTela)} · ${U.fmtInt(mc)} ${mc === 1 ? 'mês completo' : 'meses completos'} · meta: ${esc(UI.descMeta(R))}`;
     const nAb = O.abaixo.length, rotAb = O.plano.some(x => !x.nome) ? 'grupos' : rotPl;
     const kpis = `<div class="kpi-strip ia-kpis" id="kpis-placar">
-      ${tileKpi('Ganho conservador', `<span id="kpi-cons">${U.fmtInt(O.cons)}<span class="kpi-un"> h/mês</span></span>`, O.det ? `≈ <b>${f1(O.consFte)} FTE</b> · detratores levados a ${lim}% da meta` : `nenhum dev abaixo de ${lim}% da meta`)}
+      ${tileKpi('Ganho estimado', `<span id="kpi-cons">${U.fmtInt(O.cons)}<span class="kpi-un"> h/mês</span></span>`, O.det ? `≈ <b>${f1(O.consFte)} FTE</b> · detratores levados a ${lim}% da meta` : `nenhum dev abaixo de ${lim}% da meta`)}
       ${O.nivel ? tileKpi(`${rotAb[0].toUpperCase()}${rotAb.slice(1)} abaixo da meta`, `<span id="kpi-abaixo">${U.fmtInt(nAb)}<span class="kpi-un"> de ${U.fmtInt(O.plano.length)}</span></span>`, nAb ? `${U.fmtInt(O.pot)} h/mês até a meta (≈ ${f1(O.potFte)} FTE) · plano de ação` : `${GEN[O.nivel][3]} ${rotPl} na meta`)
         : tileKpi('Perímetro até a meta', `<span id="kpi-abaixo">${U.fmtInt(O.pot)}<span class="kpi-un"> h/mês</span></span>`, O.pot > 0 ? `≈ ${f1(O.potFte)} FTE para o perímetro chegar à meta` : 'perímetro já na meta')}
       ${tileKpi('Realizado ÷ meta', `<span id="kpi-real">${U.ok(pm.pctMeta) ? U.fmtPct(pm.pctMeta, 0) : '—'}</span>`, U.ok(pm.meta) ? `${f1(pm.atual)} de ${f1(pm.meta)} h/mês·dev` : 'sem meta no período', U.ok(pm.pctMeta) ? (pm.pctMeta >= 1 ? 'pos' : 'neg') : '')}
@@ -3466,14 +3471,14 @@ ${JSON.stringify(payload, null, 1)}
     const graf = !mc ? vazio('Sem mês completo no período: amplie o período para calcular a meta.')
       : !O.nivel ? vazio('Sem empresa, tribo ou squad nos dados cadastrais: importe o cadastro para ver onde está o ganho.', '<button class="btn s xs" data-click="irCadastro">Importar dados cadastrais</button>')
       : !O.grupos.length ? vazio(`Nenhum dev abaixo de ${lim}% da meta.${O.pot > 0 ? ` O que falta para a meta está no plano de ação, por ${rot.toLowerCase()}.` : ''}`, O.pot > 0 ? '<button class="btn s xs" data-click="ia" data-op="irPagina" data-k="2">Ver o plano de ação</button>' : '')
-      : O.plano.length < 2 ? (g1 => vazio(`O recorte tem ${O.nivel === 'squad' ? 'um squad só' : `uma ${rot.toLowerCase()} só`}: as ${U.fmtInt(O.cons)} h/mês de ganho conservador vêm ${O.det === 1 ? 'do único detrator' : `dos ${U.fmtInt(O.det)} detratores`} de ${esc(nomeGrupo(g1, O.nivel))}.`,
+      : O.plano.length < 2 ? (g1 => vazio(`O recorte tem ${O.nivel === 'squad' ? 'um squad só' : `uma ${rot.toLowerCase()} só`}: as ${U.fmtInt(O.cons)} h/mês de ganho estimado vêm ${O.det === 1 ? 'do único detrator' : `dos ${U.fmtInt(O.det)} detratores`} de ${esc(nomeGrupo(g1, O.nivel))}.`,
           `<button class="btn s xs" data-click="detalhe" data-tipo="${O.nivel}" data-k="${esc(g1.nome || '(sem)')}">Abrir o detalhamento de ${esc(nomeGrupo(g1, O.nivel))}</button><button class="btn s xs" data-click="ia" data-op="irPagina" data-k="2">Ver o plano de ação</button>`))(O.grupos[0])
-      : `<div class="chart-wrap fill"><canvas id="ia-graf-placar" role="img" aria-label="Ganho conservador por ${rot.toLowerCase()}"></canvas></div>`;
+      : `<div class="chart-wrap fill"><canvas id="ia-graf-placar" role="img" aria-label="Ganho estimado por ${rot.toLowerCase()}"></canvas></div>`;
     const subGraf = mc && O.nivel && O.grupos.length && O.plano.length < 2 ? `um só ${rot.toLowerCase()} no recorte · troque o nível ao lado para ver por ${O.niveis.filter(k => k !== O.nivel).map(k => Calc.ROTULO_CRIT[k].toLowerCase()).join(' ou ') || 'outro nível'}`
-      : mc && O.nivel && O.grupos.length ? `horas por mês para levar os detratores de cada ${rot.toLowerCase()} a ${lim}% da meta · ${O.destaque === 1 ? 'o maior em destaque' : `${O.destaque} maiores em destaque`} · clique para detalhar` : '';
-    const cardGraf = `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Onde está o ganho conservador</div>${subGraf ? `<div class="card-sub">${subGraf}</div>` : ''}</div>${seg ? `<div class="card-tools">${seg}</div>` : ''}</div><div class="card-body">${graf}</div></div>`;
-    const nota = `${esc(UI.fonteTxt())}. Nota: ganho conservador = Σ detratores (${lim}% da meta − produtividade), sem compensação entre pessoas; ${rotPl} abaixo da meta = (meta − realizado) × devs/mês, com compensação dentro do grupo; FTE = horas ÷ meta. Indício para investigação, não avaliação de desempenho.`;
-    return `${UI.pageHdr('Oportunidade · Placar', esc(leadPlacar(O, R)), sub, '', 'pl-lead', X.trilha)}${kpis}<div class="placar-grid">${cardGraf}${htmlRecomendacoes(X, O)}</div>${UI.pgNota(nota)}`;
+      : '';
+    const cardGraf = `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Onde está o ganho estimado</div>${subGraf ? `<div class="card-sub">${subGraf}</div>` : ''}</div>${seg ? `<div class="card-tools">${seg}</div>` : ''}</div><div class="card-body">${graf}</div></div>`;
+    const nota = `${esc(UI.fonteTxt())}. Ganho estimado: detratores levados a ${lim}% da meta. Indício para investigação, não avaliação de desempenho.`;
+    return `${UI.pageHdr('Oportunidade · Placar', '', sub, '', 'pl-lead', X.trilha)}${kpis}<div class="placar-grid">${cardGraf}${htmlRecomendacoes(X, O)}</div>${UI.pgNota(nota)}`;
   }
   /* recomendações da IA no placar: a mensagem principal, os gaps de maior prioridade e as ações por grupo; o detalhe fica nas páginas seguintes */
   function htmlRecomendacoes(X, O) {
@@ -3481,7 +3486,7 @@ ${JSON.stringify(payload, null, 1)}
     const nvA = X.payload.plano_meta.nivel, rotA = Calc.ROTULO_CRIT[nvA] ? Calc.ROTULO_CRIT[nvA].toLowerCase() : 'grupo';
     const tools = g ? '<button class="btn s xs" data-click="ia" data-op="cancelar">Cancelar</button>'
       : `<button class="btn ${res ? 's' : 'p'} xs" data-click="ia" data-op="gerar">${res ? '↻ Gerar de novo' : '✦ Gerar recomendações'}</button>`;
-    const sub = res && !g ? `${ult ? '<span class="pill pa">gerado para outro recorte</span> ' : ''}${esc(nomeModelo(res.modelo))} · ${esc(U.fmtDataHora(res.geradoEm))}` : `${esc(NOME_MODELO)} · só agregados, pessoas pseudonimizadas`;
+    const sub = res && !g ? `${ult ? '<span class="pill pa">gerado para outro recorte</span> ' : ''}gerada em ${esc(U.fmtDataHora(res.geradoEm))}` : 'só agregados, pessoas pseudonimizadas';
     let corpo;
     if (g) corpo = `<div class="empty" style="padding:24px 12px"><h2 style="font-size:16px"><span class="spin"></span>Analisando o recorte…</h2><p id="ia-prog">${esc(progTxt())}</p></div>`;
     else if (!res) corpo = `<div class="empty" style="padding:24px 12px"><p>Para cada ${esc(rotA)} com ganho, a IA aponta a alavanca que os números indicam (integração, revisão, CI, retrabalho, tamanho do lote, concentração) e uma ação com alvo numérico; cada número é conferido com o recorte.</p><div class="acts"><button class="btn p" data-click="ia" data-op="gerar">✦ Gerar recomendações</button></div></div>`;
@@ -3492,7 +3497,7 @@ ${JSON.stringify(payload, null, 1)}
         return `<button class="rec-item" data-click="ia" data-op="verGap" data-p="${esc(ins.prioridade)}" title="${esc(ins.mensagem || ins.titulo)}"><span class="pg-n">${esc(ins.prioridade)}</span><span class="rec-txt"><b>${esc(f2 ? ins.acao : ins.titulo)}</b><span class="mini">${esc(rotRecorte(ins.recorte))}${f2 ? ` · ${esc(ROT_TIPO[ins.tipo] || ins.tipo)}` : ''}</span></span><span class="rec-val">${v !== null ? `+${fmtG(v)} h/mês` : '<span class="nc">qualitativo</span>'} ${confPill(ins.confianca)}</span></button>`; };
       const rotulo = (txt, k, link) => `<div class="rec-rot"><span class="ia-rot">${txt}</span><button class="btn-link" data-click="ia" data-op="irPagina" data-k="${k}">${link} ›</button></div>`;
       corpo = `<p class="ia-msg" style="margin-top:0"><b>${inline(res.resumo, X.nomes)}</b></p>
-        ${f2 ? rotulo(`Maiores ganhos · ação por ${esc(rotA)}`, 3, `Ver as ${U.fmtInt(res.validos.length)} recomendações`) : rotulo('Principais gaps · ganho conservador estimado', 3, `Ver os ${U.fmtInt(res.validos.length)} gaps`)}<div class="rec-lista">${top.map(item).join('') || '<div class="note">Nenhuma recomendação passou na conferência dos números.</div>'}</div>
+        ${f2 ? rotulo(`Maiores ganhos · ação por ${esc(rotA)}`, 3, `Ver as ${U.fmtInt(res.validos.length)} recomendações`) : rotulo('Principais gaps · ganho estimado', 3, `Ver os ${U.fmtInt(res.validos.length)} gaps`)}<div class="rec-lista">${top.map(item).join('') || '<div class="note">Nenhuma recomendação passou na conferência dos números.</div>'}</div>
         ${acoes.length ? `<div style="margin-top:12px">${rotulo(`Ações por ${esc(rotA)}`, 2, 'Ver o plano de ação')}</div><ul class="rec-acoes">${acoes.map(a => `<li><b>${esc(a.grupo)}</b>: ${esc(a.acao)} <span class="mini">· ${esc(a.dono)}</span></li>`).join('')}</ul>` : ''}`;
     }
     return `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Recomendações da IA</div><div class="card-sub">${sub}</div></div><div class="card-tools">${tools}</div></div><div class="card-body" style="overflow:auto">${corpo}</div></div>`;
@@ -3502,18 +3507,20 @@ ${JSON.stringify(payload, null, 1)}
     const R = X.R, D = S._plano = dadosPlano(X), { niveis, nivel, perim, plano } = D, rot = nivel ? Calc.ROTULO_CRIT[nivel] : 'Grupo', rotPl = ROT_PL[nivel] || 'grupos';
     const abaixo = plano.filter(g => g.horasParaMeta > 0), soma = abaixo.reduce((a, g) => a + g.horasParaMeta, 0), fte = abaixo.reduce((a, g) => a + fteDe(g), 0), f1 = v => U.ok(v) ? U.fmtNum(v, 1) : '—';
     const r = resultadoPara(X.assinatura), acoes = new Map(((r && r.acoes) || []).map(a => [a.grupo, a]));
-    const lead = !U.ok(perim.meta) ? 'Sem meta calculável: o período não tem mês completo'
-      : !plano.length ? `O perímetro está em ${U.fmtPct(perim.pctMeta, 0)} da meta; o plano é por empresa, tribo ou squad`
-      : abaixo.length ? `${U.fmtInt(abaixo.length)} de ${U.fmtInt(plano.length)} ${plano.some(g => !g.nome) ? 'grupos' : rotPl} estão abaixo da meta e somam ${U.fmtInt(soma)} h/mês (≈ ${f1(fte)} FTE) até ela`
-      : `${plano.some(g => !g.nome) ? 'Todos os' : GEN[nivel][3]} ${U.fmtInt(plano.length)} ${plano.some(g => !g.nome) ? 'grupos' : rotPl} estão na meta`;
-    const sub = `perímetro: realizado ${f1(perim.atual)} × meta ${f1(perim.meta)} h/mês·dev${U.ok(perim.pctMeta) ? ` (${U.fmtPct(perim.pctMeta, 0)})` : ''} · ação sugerida pela IA para cada ${esc(rot.toLowerCase())} abaixo da meta · clique no nome para detalhar`;
+    // a página não tem cartões: o resumo vem numa linha de números em destaque, não numa frase corrida
+    const rotG = plano.some(g => !g.nome) ? 'grupos' : rotPl;
+    const lead = !U.ok(perim.meta) ? '<span>sem meta calculável: o período não tem mês completo</span>'
+      : `<span><b>${U.fmtPct(perim.pctMeta, 0)}</b> da meta <span class="m">(${f1(perim.atual)} de ${f1(perim.meta)} h/mês·dev)</span></span>`
+        + (plano.length ? `<span><b>${U.fmtInt(abaixo.length)}</b> de ${U.fmtInt(plano.length)} ${rotG} abaixo da meta</span>` : '')
+        + (abaixo.length ? `<span><b>${U.fmtInt(soma)}</b> h/mês até a meta <span class="m">≈ ${f1(fte)} FTE</span></span>` : '');
+    const sub = '';
     const tools = `${niveis.length > 1 ? `<div class="seg">${niveis.map(k => `<button data-click="ia" data-op="planoNivel" data-k="${k}" class="${k === nivel ? 'on' : ''}">${Calc.ROTULO_CRIT[k]}</button>`).join('')}</div>` : ''}
       <button class="btn ${r ? 's' : 'p'} xs" data-click="ia" data-op="gerar" ${S.gerando ? 'disabled' : ''} title="A IA sugere uma ação para cada ${rot.toLowerCase()} abaixo da meta">${S.gerando ? '<span class="spin"></span>Gerando…' : r ? '↻ Ações (IA)' : '✦ Sugerir ações (IA)'}</button>
       <button class="btn s xs" data-click="ia" data-op="exportarPlano" ${plano.length ? '' : 'disabled'}>Exportar Excel</button>`;
     const corpo = !plano.length ? `<div class="empty"><p>Sem empresa, tribo ou squad nos dados cadastrais.</p><div class="acts"><button class="btn s xs" data-click="irCadastro">Importar dados cadastrais</button></div></div>`
       : `<div class="tbl-wrap fill" id="pl-wrap" style="overflow:auto">${tabelaPlano(plano, nivel, rot, acoes, !!r, R)}</div>`;
-    const nota = `${esc(UI.fonteTxt())}. Nota: meta de cada dev = meta da tribo dele (${esc(UI.descMeta(R))}), média ponderada por dev-mês nos meses completos; horas/mês para a meta = (meta − realizado) × devs por mês; FTE = horas ÷ meta do grupo.`;
-    return `${UI.pageHdr('Oportunidade · Plano de ação', esc(lead), sub, tools, 'pa-lead', X.trilha)}<div class="card fill"><div class="card-body">${corpo}</div></div>${UI.pgNota(nota)}`;
+    const nota = `${esc(UI.fonteTxt())}. Horas/mês para a meta = (meta − realizado) × devs por mês.`;
+    return `${UI.pageHdr('Oportunidade · Plano de ação', lead, sub, tools, 'pa-lead', X.trilha, true)}<div class="card fill"><div class="card-body">${corpo}</div></div>${UI.pgNota(nota)}`;
   }
   function tabelaPlano(plano, nivel, rot, acoes, temIA, R) {
     const f1 = v => U.ok(v) ? U.fmtNum(v, 1) : '—', nomeG = g => nomeGrupo(g, nivel), consG = g => (g.ids || []).reduce((s, id) => s + ganhoCons(R, id), 0);
@@ -3522,12 +3529,12 @@ ${JSON.stringify(payload, null, 1)}
     const tdAtv = g => !atvP ? '' : Calc.TIPOS_ATV.map(t => { const h = (g.ids || []).reduce((s, id) => s + ((atvP.get(id) || {})[t] || 0), 0); return `<td class="num">${g.devMes ? f1(h / g.devMes) : '—'}</td>`; }).join('');
     const thAtv = !atvP ? '' : Calc.TIPOS_ATV.map(t => `<th class="num" title="${esc(Calc.ROTULO_ATV[t])} (fora do commit), h/mês·dev nos meses completos; não entra na meta">${esc(Calc.ROTULO_ATV_CURTO[t])}</th>`).join('');
     const linhas = plano.map(g => { const a = acoes.get(g.nome || `(sem ${nivel})`), pct = g.pctMeta, naMeta = g.horasParaMeta <= 0;
-      return `<tr><td><a href="#" data-click="detalhe" data-tipo="${nivel}" data-k="${esc(g.nome || '(sem)')}" title="Abrir o detalhamento">${esc(nomeG(g))}</a></td>${nivel === 'squad' ? `<td>${esc(g.tribo || '—')}</td>` : ''}
+      return `<tr>${nivel === 'squad' ? `<td>${esc(g.tribo || '—')}</td>` : ''}<td><a href="#" data-click="detalhe" data-tipo="${nivel}" data-k="${esc(g.nome || '(sem)')}" title="Abrir o detalhamento">${esc(nomeG(g))}</a></td>
         <td class="num">${f1(g.devsMes)}</td><td class="num">${f1(g.atual)}</td>${tdAtv(g)}<td class="num">${f1(g.meta)}</td>
         <td class="pl-bar"><div class="ia-bar"><i><span style="width:${U.ok(pct) ? Math.min(100, pct * 100) : 0}%;background:var(${naMeta ? '--ok' : '--primary'})"></span></i><b>${U.ok(pct) ? U.fmtPct(pct, 0) : '—'}</b></div></td>
-        <td class="num">${g.gap > 0 ? '+' + f1(g.gap) : '—'}</td><td class="num"><b>${g.horasParaMeta > 0 ? U.fmtInt(g.horasParaMeta) : '—'}</b></td><td class="num">${g.horasParaMeta > 0 ? f1(fteDe(g)) : '—'}</td><td class="num">${U.fmtInt(g.detrator)}</td><td class="num">${(v => v > 0 ? U.fmtInt(v) : '—')(consG(g))}</td>
+        <td class="num"><b>${g.horasParaMeta > 0 ? U.fmtInt(g.horasParaMeta) : '—'}</b></td><td class="num">${g.horasParaMeta > 0 ? f1(fteDe(g)) : '—'}</td><td class="num">${(v => v > 0 ? U.fmtInt(v) : '—')(consG(g))}</td>
         <td class="pl-acao">${a ? `${naMeta ? '<span class="pos">na meta</span> · ' : ''}${esc(a.acao)} <span class="mini">· ${esc(a.dono)}</span>` : naMeta ? '<span class="pos">na meta</span>' : `<span class="nc">${temIA ? 'sem sugestão' : 'use ✦ Sugerir ações'}</span>`}</td></tr>`; }).join('');
-    return `<table class="tbl compacta ia-int quebra-th" id="pl-tab"><thead><tr><th>${esc(rot)}</th>${nivel === 'squad' ? '<th>Tribo</th>' : ''}<th class="num" title="desenvolvedores por mês, média dos meses completos">Devs/mês</th><th class="num" title="h/mês·dev nos meses completos">Realizado (h/mês·dev)</th>${thAtv}<th class="num" title="média da meta de cada dev, ponderada por dev-mês">Meta (h/mês·dev)</th><th>% da meta</th><th class="num" title="meta − realizado, em h/mês por dev">Falta por dev (h/mês)</th><th class="num" title="falta por dev × devs por mês">Horas/mês p/ meta</th><th class="num" title="horas/mês para a meta ÷ meta do grupo">FTE</th><th class="num">Detratores</th><th class="num" title="ganho conservador: detratores do grupo levados a ${esc(U.fmtNum(R.lim.det * 100, 0))}% da meta, em h/mês (sem compensação entre pessoas; é o número do placar)">Ganho cons. (h/mês)</th><th>Ação sugerida</th></tr></thead><tbody>${linhas}</tbody></table>`;
+    return `<table class="tbl compacta ia-int quebra-th" id="pl-tab"><thead><tr>${nivel === 'squad' ? '<th>Tribo</th>' : ''}<th>${esc(rot)}</th><th class="num" title="desenvolvedores por mês, média dos meses completos">Devs/mês</th><th class="num" title="h/mês·dev nos meses completos">Realizado (h/mês·dev)</th>${thAtv}<th class="num" title="média da meta de cada dev, ponderada por dev-mês">Meta (h/mês·dev)</th><th>% da meta</th><th class="num" title="(meta − realizado) × devs por mês">Horas/mês p/ meta</th><th class="num" title="horas/mês para a meta ÷ meta do grupo">FTE</th><th class="num" title="detratores do grupo levados a ${esc(U.fmtNum(R.lim.det * 100, 0))}% da meta, sem compensação entre pessoas (o número do Placar)">Ganho estimado (h/mês)</th><th>Ação sugerida</th></tr></thead><tbody>${linhas}</tbody></table>`;
   }
   /* rótulo à direita da barra: horas e participação no ganho conservador, calculada sobre o valor sem arredondar (o mesmo do título) */
   const rotuloGanho = (itens, total) => ({ id: 'rotuloGanho', afterDatasetsDraw(c) { const { ctx } = c, m = c.getDatasetMeta(0); ctx.save(); ctx.font = '600 11px Segoe UI, sans-serif'; ctx.fillStyle = UI.COR.escuro; ctx.textBaseline = 'middle';
@@ -3542,7 +3549,7 @@ ${JSON.stringify(payload, null, 1)}
     const itens = O.grupos.slice(0, MAX).map(g => ({ nome: nomeGrupo(g, O.nivel), chave: g.nome || '(sem)', v: g.v, fte: g.fte, det: g.det }));
     const resto = O.grupos.slice(MAX);
     if (resto.length) itens.push({ nome: `Demais ${resto.length} ${ROT_PL[O.nivel]}`, chave: null, v: soma(resto, 'v'), fte: soma(resto, 'fte'), det: soma(resto, 'det') });
-    novoGrafico(cv, { type: 'bar', plugins: [rotuloGanho(itens, O.cons)], data: { labels: itens.map(x => x.nome), datasets: [{ label: 'Ganho conservador', data: itens.map(x => Math.round(x.v)),
+    novoGrafico(cv, { type: 'bar', plugins: [rotuloGanho(itens, O.cons)], data: { labels: itens.map(x => x.nome), datasets: [{ label: 'Ganho estimado', data: itens.map(x => Math.round(x.v)),
         backgroundColor: itens.map((x, i) => i < O.destaque && x.chave !== null ? PALETA()[0] : UI.COR.neutra), borderRadius: 4, borderSkipped: 'start', maxBarThickness: 22 }] },
       options: { responsive: true, maintainAspectRatio: false, animation: false, indexAxis: 'y', layout: { padding: { right: 88 } }, scales: eixos(true), interaction: { mode: 'nearest', axis: 'y', intersect: false },
         onClick: (e, els) => { const x = els && els.length ? itens[els[0].index] : null; if (x && x.chave !== null) App.abrirDetalhe(O.nivel, x.chave); },
@@ -3553,11 +3560,11 @@ ${JSON.stringify(payload, null, 1)}
     const X = recorteIA(), R = X.R, O = oportunidade(X), { nivel, perim, plano } = O, rot = nivel ? Calc.ROTULO_CRIT[nivel] : 'Grupo', r = resultadoPara(X.assinatura), acoes = new Map(((r && r.acoes) || []).map(a => [a.grupo, a]));
     const atvP = R.temAtv ? Calc.atvPorGrupo(R.atvUniv.filter(a => R.status.get(a.ym) === 'completo'), 'autor') : null;
     const cabA = atvP ? Calc.TIPOS_ATV.map(t => `${Calc.ROTULO_ATV[t]} (h/mês·dev)`) : [], vA = g => !atvP ? [] : Calc.TIPOS_ATV.map(t => g.devMes ? U.round(g.ids.reduce((s, id) => s + ((atvP.get(id) || {})[t] || 0), 0) / g.devMes) : null);
-    const cab = [rot, 'Tribo', 'Devs/mês', 'Realizado (h/mês·dev)', ...cabA, 'Meta (h/mês·dev)', '% da meta', 'Falta por dev (h/mês)', 'Horas/mês para a meta', 'FTE para a meta', 'Detratores', 'Ganho conservador (h/mês)', 'Ação sugerida (IA)', 'Dono'];
+    const cab = [rot, 'Tribo', 'Devs/mês', 'Realizado (h/mês·dev)', ...cabA, 'Meta (h/mês·dev)', '% da meta', 'Falta por dev (h/mês)', 'Horas/mês para a meta', 'FTE para a meta', 'Detratores', 'Ganho estimado (h/mês)', 'Ação sugerida (IA)', 'Dono'];
     const wb = XLSX.utils.book_new(), n = v => U.ok(v) ? U.round(v) : null, lim = U.fmtNum(R.lim.det * 100, 0);
     // os mesmos números do placar: ganho conservador (detratores) e horas até a meta somadas pelos grupos abaixo dela
     const ws0 = XLSX.utils.aoa_to_sheet([['Plano de ação — Análise de desenvolvimento'], [], ['Projeto', App.projeto.nome], ['Recorte', X.desc], ['Meta', UI.descMeta(R)], ['Meta do perímetro (h/mês·dev)', n(perim.meta)], ['Realizado (h/mês·dev)', n(perim.atual)],
-      [`Ganho conservador (h/mês, ${O.det} detratores levados a ${lim}% da meta)`, Math.round(O.cons)], ['Ganho conservador (FTE)', U.round(O.consFte, 1)],
+      [`Ganho estimado (h/mês, ${O.det} detratores levados a ${lim}% da meta)`, Math.round(O.cons)], ['Ganho estimado (FTE)', U.round(O.consFte, 1)],
       [`Horas/mês até a meta (soma dos ${O.abaixo.length} ${O.abaixo.some(g => !g.nome) ? 'grupos' : ROT_PL[nivel] || 'grupos'} abaixo dela)`, Math.round(O.pot)], ['Horas/mês até a meta (FTE)', U.round(O.potFte, 1)],
       ['Horas/mês para a meta (perímetro, com compensação entre grupos)', n(perim.horasParaMeta)], ['Exportado em', U.fmtDataHora(U.hojeISO())], ['Dados demonstrativos', App.projeto.fontes.some(f => f.demo) ? 'SIM — dados sintéticos' : 'não']]);
     ws0['!cols'] = [{ wch: 50 }, { wch: 90 }]; XLSX.utils.book_append_sheet(wb, ws0, 'Resumo');
@@ -3570,8 +3577,8 @@ ${JSON.stringify(payload, null, 1)}
     const r = resultadoPara(X.assinatura), ult = !r && App.projeto.ia && App.projeto.ia.ultimo, res = g0(r || ult), g = S.gerando, demo = App.projeto.fontes.some(f => f.demo), ok = res && !g;
     const tools = `${g ? '<button class="btn s xs" data-click="ia" data-op="cancelar">Cancelar</button>' : `<button class="btn p xs" data-click="ia" data-op="gerar">${r ? '↻ Gerar de novo' : '✦ Gerar insights'}</button>`}
       <button class="btn s xs" data-click="ia" data-op="exportar" ${ok ? '' : 'disabled'}>Exportar Excel</button>`;
-    const sub = ok ? `${ult ? '<span class="pill pa">gerado para outro recorte</span> ' : ''}${esc(U.fmtDataHora(res.geradoEm))} · ${esc(nomeModelo(res.modelo))}${res.lacunas.length ? ` · <span class="ia-lac" title="${esc(res.lacunas.join('\n'))}">ⓘ ${res.lacunas.length} lacuna(s) de dados</span>` : ''}`
-      : `${esc(NOME_MODELO)} · só agregados, pessoas pseudonimizadas`;
+    const sub = ok ? `${ult ? '<span class="pill pa">gerado para outro recorte</span> ' : ''}gerada em ${esc(U.fmtDataHora(res.geradoEm))}${res.lacunas.length ? ` · <span class="ia-lac" title="${esc(res.lacunas.join('\n'))}">ⓘ ${res.lacunas.length} lacuna(s) de dados</span>` : ''}`
+      : 'só agregados, pessoas pseudonimizadas';
     let corpo;
     if (g) corpo = `<div class="empty"><h2><span class="spin"></span>Analisando o recorte…</h2><p id="ia-prog">${esc(progTxt())}</p></div>`;
     else if (!res) corpo = `<div class="empty"><h2>Gaps de produtividade do recorte</h2><p>Uma recomendação por grupo com ganho, no nível do Plano de ação: a alavanca, a ação com alvo numérico e o indicador; cada número é conferido.</p>
@@ -3582,8 +3589,8 @@ ${JSON.stringify(payload, null, 1)}
         <div class="tbl-wrap fill" id="ia-wrap"><table class="tbl compacta" id="ia-tbl"><thead></thead><tbody></tbody></table></div>
         <div class="pag-slot" id="ia-pag"></div>${res.descartados.length ? `<button class="btn-link" data-click="ia" data-op="descartados" style="align-self:flex-start">${S.verDescartados ? '← voltar' : `${res.descartados.length} descartado(s) na conferência`}</button>` : ''}</div>
         <div class="ia-det" id="ia-det"></div></div>`;
-    return `${UI.pageHdr('Oportunidade · Gaps (IA)', ok ? inline(res.resumo, X.nomes) : 'Gaps de produtividade do recorte', sub, tools, 'gp-lead', X.trilha)}${ok ? htmlKpis(res, oportunidade(X).cons) : ''}<div class="card fill"><div class="card-body">${corpo}</div></div>
-      ${ok ? UI.pgNota(`${esc(UI.fonteTxt())}. Nota: gaps estimados pela IA a partir dos agregados do recorte, com pessoas pseudonimizadas; cada número citado foi conferido com o recorte enviado. Indício para investigação, não avaliação de desempenho.`) : ''}`;
+    return `${UI.pageHdr('Oportunidade · Gaps (IA)', ok ? `✦ ${inline(res.resumo, X.nomes)}` : '', sub, tools, 'gp-lead', X.trilha, 'ia-destaque')}${ok ? htmlKpis(res, oportunidade(X).cons) : ''}<div class="card fill"><div class="card-body">${corpo}</div></div>
+      ${ok ? UI.pgNota(`${esc(UI.fonteTxt())}. Cada número da IA é conferido com o recorte enviado.`) : ''}`;
   }
   const g0 = r => r && { ...r, lacunas: r.lacunas || [], descartados: r.descartados || [], validos: r.validos || [] };
 
@@ -3613,10 +3620,10 @@ ${JSON.stringify(payload, null, 1)}
       ${ins.mensagem ? `<p class="ia-msg">${t(ins.mensagem)}</p>` : ''}
       <div class="ia-chips">${g && U.ok(g.conservador) ? `<span class="chip on">+${fmtG(g.conservador)} h/mês${U.ok(g.fte_equivalente) ? ` · ${fmtG(g.fte_equivalente)} FTE` : ''}</span>` : '<span class="chip">ganho qualitativo</span>'}${confPill(ins.confianca)}${ins.motivo_confianca ? `<span class="mini">${esc(ins.motivo_confianca)}</span>` : ''}</div>
       ${comGraficos && grp && grp.ids ? `<div class="ia-bloco"><div class="ia-rot">Evolução · h/mês·dev do grupo × meta</div><div class="ia-graf"><canvas id="ia-graf-grupo" role="img" aria-label="Evolução mensal do grupo contra a meta"></canvas></div>
-        <div class="legend"><div class="ld"><div class="ldot line" style="background:${PALETA()[0]}"></div>grupo</div><div class="ld"><div class="ldot line" style="background:${UI.COR.neutra}"></div>meta do grupo (mês a mês)</div><div class="ld mini">meses parciais ficam em branco</div></div></div>` : ''}
+        <div class="legend"><div class="ld"><div class="ldot line" style="background:${PALETA()[0]}"></div>grupo</div><div class="ld"><div class="ldot line" style="background:${UI.COR.neutra}"></div>meta do grupo</div></div></div>` : ''}
       ${tot ? `<div class="ia-bloco"><div class="ia-rot">Pessoas por classificação · ${U.fmtInt(tot)}</div><div class="ia-comp" role="img" aria-label="${comp.map(([k, n]) => `${ROT_CAT[k]} ${n}`).join(', ')}">${comp.map(([k, n]) => `<span style="flex:${n};background:${corCat(k)}" title="${ROT_CAT[k]}: ${n} (${U.fmtPct(n / tot, 0)})"></span>`).join('')}</div>
         <div class="legend">${comp.map(([k, n]) => `<div class="ld"><div class="ldot" style="background:${corCat(k)}"></div>${ROT_CAT[k]} <b>${n}</b> <span class="mini">${U.fmtPct(n / tot, 0)}</span></div>`).join('')}</div></div>` : ''}
-      ${met.length ? `<div class="ia-bloco"><div class="ia-rot">Números que sustentam</div><table class="tbl compacta ia-met ia-int"><thead><tr><th>Métrica</th><th class="num">${esc(rotNivelIns(ins))}</th>${comRef ? `<th class="num" title="${esc(X.payload.referencia_descricao || 'mediana dos grupos')}">Mediana</th>` : ''}<th>Campo</th></tr></thead><tbody>${met.map(m => `<tr><td>${esc(m.rotulo)}</td><td class="num"><b>${metricaFmt(m)}</b></td>${comRef ? `<td class="num">${U.ok(m.referencia) ? fmtCampo(m.campo, m.referencia) : '—'}</td>` : ''}<td class="sub" title="campo de origem no recorte">${esc(m.campo)}</td></tr>`).join('')}</tbody></table></div>`
+      ${met.length ? `<div class="ia-bloco"><div class="ia-rot">Números que sustentam</div><table class="tbl compacta ia-met ia-int"><thead><tr><th>Métrica</th><th class="num">${esc(rotNivelIns(ins))}</th>${comRef ? `<th class="num" title="${esc(X.payload.referencia_descricao || 'mediana dos grupos')}">Mediana</th>` : ''}</tr></thead><tbody>${met.map(m => `<tr><td title="${esc(`campo ${m.campo}`)}">${esc(ROT_CAMPO[m.campo] || m.rotulo)}</td><td class="num"><b>${metricaFmt(m)}</b></td>${comRef ? `<td class="num">${U.ok(m.referencia) ? fmtCampo(m.campo, m.referencia) : '—'}</td>` : ''}</tr>`).join('')}</tbody></table></div>`
         : ins.evidencia ? `<div class="ia-bloco"><div class="ia-rot">Evidência</div><div class="mini">${t(ins.evidencia)}</div></div>` : ''}
       <div class="ia-bloco"><div class="ia-rot">Ação${ins.dono ? ` · ${esc(ins.dono)}` : ''}</div><div class="ia-acao">${t(ins.acao || ins.acao_recomendada)}</div>
         ${ins.indicador && ins.indicador.campo ? `<div class="mini">Indicador de sucesso: <b>${esc(ROT_CAMPO[ins.indicador.campo] || ins.indicador.campo)}</b> → ${esc(fmtCampo(ins.indicador.campo, ins.indicador.alvo))}${d && U.ok(d[ins.indicador.campo]) ? ` (hoje ${esc(fmtCampo(ins.indicador.campo, d[ins.indicador.campo]))})` : ''}</div>` : ''}
@@ -3717,7 +3724,7 @@ ${JSON.stringify(payload, null, 1)}
     const mudou = S.chat.length && S.chatAssinatura !== X.assinatura, temInsights = !!resultadoPara(X.assinatura);
     const sugs = ['Os 3 maiores gaps', 'h/mês·dev por mês', 'Onde há capacidade ociosa?', 'Resumo para o sócio'];
     const msgs = S.chat.map((m, i) => `<div class="msg ${m.role === 'user' ? 'u' : 'a'}${m.erro ? ' erro' : ''}" ${i === S.chat.length - 1 && S.respondendo ? 'id="ia-atual"' : ''}>${m.role === 'user' ? esc(m.text).replace(/\n/g, '<br>') : m.text ? md(m.text, X.nomes) : '<span class="spin"></span>pensando…'}</div>`).join('');
-    return `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Conversa com o assistente</div><div class="card-sub">${esc(NOME_MODELO)} · recorte atual${temInsights ? ' e insights gerados' : ''}</div></div>
+    return `<div class="card fill"><div class="card-hdr"><div><div class="card-title">Conversa com o assistente</div><div class="card-sub">recorte atual${temInsights ? ' e recomendações geradas' : ''}</div></div>
       <div class="card-tools"><button class="btn s xs" data-click="ia" data-op="novaConversa" ${S.chat.length && !S.respondendo ? '' : 'disabled'}>Nova conversa</button></div></div>
       <div class="card-body">${mudou ? '<div class="note box warn" style="margin:0;flex:none">Recorte mudou: a próxima pergunta abre uma conversa nova.</div>' : ''}
         <div class="chat" id="ia-chat">${msgs || `<div class="empty" style="padding:28px 12px"><p>Pergunte sobre o recorte. Respostas curtas, com tabela ou gráfico.</p><div class="sug">${sugs.map(s => `<button data-click="ia" data-op="sugestao" data-t="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>`}</div>
@@ -3728,7 +3735,7 @@ ${JSON.stringify(payload, null, 1)}
   function exportar() {
     const X = recorteIA(), r = resultadoPara(X.assinatura) || (App.projeto.ia && App.projeto.ia.ultimo); if (!r) return;
     const f2 = r.formato === 2;
-    const cab = ['Prioridade', f2 ? 'Alavanca' : 'Tipo', 'Recorte', f2 ? 'Recomendação' : 'Gap', f2 ? 'Diagnóstico' : 'Mensagem', 'Números que sustentam', 'Ganho conservador (h/mês)', f2 ? 'Horas até a meta (h/mês)' : 'Ganho potencial (h/mês)', 'FTE equivalente', 'Sobreposição com', 'Ação', 'Indicador de sucesso', 'Dono', 'Confirmar antes', 'Causa provável', 'Explicação alternativa', 'Confiança', 'Motivo da confiança'];
+    const cab = ['Prioridade', f2 ? 'Alavanca' : 'Tipo', 'Recorte', f2 ? 'Recomendação' : 'Gap', f2 ? 'Diagnóstico' : 'Mensagem', 'Números que sustentam', 'Ganho estimado (h/mês)', f2 ? 'Horas até a meta (h/mês)' : 'Ganho potencial (h/mês)', 'FTE equivalente', 'Sobreposição com', 'Ação', 'Indicador de sucesso', 'Dono', 'Confirmar antes', 'Causa provável', 'Explicação alternativa', 'Confiança', 'Motivo da confiança'];
     const linha = ins => { const g = ins.ganho_h_mes || {}, ind = ins.indicador; return [ins.prioridade, ROT_TIPO[ins.tipo] || ins.tipo, rotRecorte(ins.recorte), ins.titulo, ins.mensagem || '',
       (ins.metricas || []).map(m => `${m.rotulo}: ${metricaFmt(m)}${U.ok(m.referencia) ? ` (mediana ${fmtCampo(m.campo, m.referencia)})` : ''} (${m.campo})`).join(' | ') || ins.evidencia || '',
       g.conservador ?? null, g.potencial ?? null, g.fte_equivalente ?? null, (ins.sobreposicao_com || []).join(', '), ins.acao || ins.acao_recomendada || '', ind && ind.campo ? `${ROT_CAMPO[ind.campo] || ind.campo} → ${fmtCampo(ind.campo, ind.alvo)}` : '',
@@ -3757,6 +3764,9 @@ ${JSON.stringify(payload, null, 1)}
       case 'planoNivel': S.planoNivel = el.dataset.k; break;
       // do placar para o detalhe: um gap (com os filtros da lista zerados, para ele aparecer) ou outra página da Oportunidade
       case 'verGap': S.selP = +el.dataset.p; S.verDescartados = false; S.filtro = { q: '', tipo: '', conf: '' }; App.irPagina('ia', 3); return;
+      // do detalhamento para a Oportunidade: a recomendação nos Gaps, ou o Placar para gerar
+      case 'abrirGap': S.selP = +el.dataset.p; S.verDescartados = false; S.filtro = { q: '', tipo: '', conf: '' }; App.irPara('ia'); App.irPagina('ia', 3); return;
+      case 'irGerar': App.irPara('ia'); App.irPagina('ia', 1); return;
       case 'irPagina': App.irPagina('ia', +el.dataset.k); return;
       case 'enviar': enviar((U.el('ia-pergunta') || {}).value); return;
       case 'sugestao': enviar(el.dataset.t); return;
@@ -3769,7 +3779,20 @@ ${JSON.stringify(payload, null, 1)}
   }
   document.addEventListener('keydown', e => { if (e.target && e.target.id === 'ia-pergunta' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviar(e.target.value); } });
 
-  return { render, acao, montar, validar, resultadoDe, guardar, numerosTexto, md, SCHEMA, SISTEMA_INSIGHTS, mensagemDados, ativarTabelas, estado: () => S };
+  /* recomendação da IA no detalhamento de um squad (ou dos squads de uma tribo): a mesma da Oportunidade, do recorte atual
+     ou, se ainda não houver, da última geração (com o aviso) */
+  function htmlRecDetalhe(tipo, chave) {
+    if (!['squad', 'tribo'].includes(tipo)) return '';
+    const X = recorteIA(), r = resultadoPara(X.assinatura), ult = !r && App.projeto.ia && App.projeto.ia.ultimo, res = g0(r || ult);
+    const nivel = X.payload.meta.nivel, nome = chave === '(sem)' ? `(sem ${tipo})` : chave;
+    const doGrupo = v => tipo === nivel ? v.recorte.nome === nome : (X.payload.grupos.find(g => g.nome === v.recorte.nome) || {}).tribo === chave;
+    const itens = res && res.formato === 2 ? res.validos.filter(v => v.recorte.nivel === nivel && doGrupo(v)).slice(0, 3) : [];
+    const cab = `<div class="ia-rot">Recomendação da IA${ult && itens.length ? ' <span class="pill pa">gerada para outro recorte</span>' : ''}</div>`;
+    if (!itens.length) return `<div class="ia-bloco">${cab}<div class="mini">${res ? `Sem recomendação para ${tipo === 'tribo' ? 'os squads desta tribo' : 'este squad'} no último resultado.` : 'Ainda não gerada para este recorte.'} <button class="btn-link" data-click="ia" data-op="irGerar">${res ? 'Ver na Oportunidade' : 'Gerar na Oportunidade'} ›</button></div></div>`;
+    return `<div class="ia-bloco">${cab}<div class="rec-lista">${itens.map(v => { const g = v.ganho_h_mes && v.ganho_h_mes.conservador;
+      return `<button class="rec-item det-rec" data-click="ia" data-op="abrirGap" data-p="${esc(v.prioridade)}" title="Ver nos Gaps (IA)"><span class="rec-txt"><b>${esc(v.acao)}</b><span class="mini">${tipo === 'tribo' ? `${esc(v.recorte.nome)} · ` : ''}${esc(ROT_TIPO[v.tipo] || v.tipo)} · ${inline(v.mensagem || '', X.nomes)}</span></span><span class="rec-val">${U.ok(g) && g > 0 ? `+${fmtG(g)} h/mês` : ''} ${confPill(v.confianca)}</span></button>`; }).join('')}</div></div>`;
+  }
+  return { render, acao, montar, validar, resultadoDe, guardar, numerosTexto, md, SCHEMA, SISTEMA_INSIGHTS, mensagemDados, ativarTabelas, htmlRecDetalhe, estado: () => S };
 })();
 </script>
 <script>'use strict';
@@ -4006,7 +4029,7 @@ const App = (() => {
       await novoProjeto('Aceite automático');
       await importarArquivos([{ name: 'relatorio_demo.xlsx', conteudo: b64buf(fx['demo_motor.xlsx']) }]);
       A.projeto.configAtiva = 'Complete|Complete'; await atualizar({ imediato: true });
-      ok(A.abaAtiva === 'ia' && document.getElementById('sec-ia').classList.contains('active') && A.pagina.ia === 1 && /Ganho conservador/.test(txt('sec-ia')), 'ACEITE 1: após importar só o Excel, abre a Oportunidade no Placar');
+      ok(A.abaAtiva === 'ia' && document.getElementById('sec-ia').classList.contains('active') && A.pagina.ia === 1 && /Ganho estimado/.test(txt('sec-ia')), 'ACEITE 1: após importar só o Excel, abre a Oportunidade no Placar');
       ok(!A.projeto.cadastros.pessoas.length && A.projeto.analise.modo === 'geral', 'ACEITE 1: sem cadastro e sem segmentação');
       irPara('geral'); irPagina('geral', 1);
       // a tela só mostra horas por mês: o total de horas é conferido no cálculo, e o cartão não traz total absoluto
@@ -4180,7 +4203,7 @@ const App = (() => {
       const subDepois = txt('ch-cat-sub'), reguaVendasDepois = document.querySelector('#cat-tribos tbody tr td:nth-child(3)').textContent;
       ok(/jan\/26–fev\/26/.test(subDepois) && reguaVendasDepois !== reguaVendasAntes, 'meta com janela jan–fev: texto e valor mudam', subDepois);
       await setFiltros({ mesIni: '2026-05', mesFim: '2026-08' });
-      ok(/jan\/26–fev\/26/.test(txt('ch-cat-sub')) && /pessoa = produtividade em mai\/26–ago\/26/.test(txt('ch-cat-sub')), 'período analisado e janela da meta independentes', txt('ch-cat-sub'));
+      ok(/jan\/26–fev\/26/.test(txt('ch-cat-sub')) && /mai\/26–ago\/26/.test(document.querySelector('#sec-geral .pg-sub').textContent), 'período analisado (subtítulo) e janela da meta (nota) independentes', `${txt('ch-cat-sub')} | ${document.querySelector('#sec-geral .pg-sub').textContent}`);
       await limparFiltros();
       { const m0 = A.ctx.metas.metaDe('2026-03', 'Vendas').regua;
         await setParametros({ metas: { padrao: { mesIni: '2026-01', mesFim: '2026-02' }, regras: [{ tribo: 'Vendas', mes: '2026-03', mesIni: '2026-01', mesFim: '2026-06' }] } });
@@ -4206,15 +4229,18 @@ const App = (() => {
       { const Rp = UI.recorte(), nv = UI.nivelPlano(Rp), pl = Calc.planoMeta(A.ctx, Rp.rowsUniv, Rp.universo, Rp.meses, Rp.status, Rp.lim, Rp.attrs, Rp.cls, nv);
         const pot = pl.reduce((s, g) => s + g.horasParaMeta, 0), abaixo = pl.filter(g => g.horasParaMeta > 0).length;
         const cons = [...Rp.universo].reduce((s, id) => { const c = Rp.cls.pessoas.get(id); return s + (c && c.categoria === 'detrator' ? Math.max(0, Rp.lim.det * c.regua - c.valor) : 0); }, 0);
-        ok(nv === 'squad' && cons > 0 && txt('kpi-cons').startsWith(U.fmtInt(cons)) && txt('pl-lead').includes(U.fmtInt(cons)) && txt('kpi-abaixo').startsWith(`${abaixo} de ${pl.length}`) && card('kpi-abaixo').includes(U.fmtInt(pot)),
-          'Placar: ganho conservador (detratores levados a 80% da meta) igual no título e no cartão; squads abaixo da meta com as horas do plano de ação', `${txt('kpi-cons')} | ${txt('pl-lead')} | ${card('kpi-abaixo')} vs ${U.fmtInt(cons)} / ${abaixo} de ${pl.length} / ${U.fmtInt(pot)}`);
+        ok(nv === 'squad' && cons > 0 && txt('kpi-cons').startsWith(U.fmtInt(cons)) && !document.getElementById('pl-lead') && txt('kpi-abaixo').startsWith(`${abaixo} de ${pl.length}`) && card('kpi-abaixo').includes(U.fmtInt(pot)),
+          'Placar: ganho estimado (detratores levados a 80% da meta) no cartão, sem frase de título repetindo; squads abaixo da meta com as horas do plano de ação', `${txt('kpi-cons')} | ${card('kpi-abaixo')} vs ${U.fmtInt(cons)} / ${abaixo} de ${pl.length} / ${U.fmtInt(pot)}`);
         { const ch = [...Rp.universo].filter(id => (Rp.cls.pessoas.get(id) || {}).categoria === 'detrator').reduce((m, id) => { const k = (Rp.attrs.get(id) || {}).squad || ''; m[k] = (m[k] || 0) + Math.max(0, Rp.lim.det * Rp.cls.pessoas.get(id).regua - Rp.cls.pessoas.get(id).valor); return m; }, {});
           const top = Object.entries(ch).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])[0];
-          ok(top && (!top[0] || txt('pl-lead').includes(top[0]) || /3 maiores/.test(txt('pl-lead'))), 'Placar: o título aponta onde o ganho conservador se concentra (o maior squad ou os 3 maiores)', `${txt('pl-lead')} · maior: ${top && top[0]}`); }
+          const chP = window.Chart && Chart.getChart(document.getElementById('ia-graf-placar')), l0 = chP ? String(chP.data.labels[0]) : '';
+          ok(top && chP && (top[0] ? l0 === top[0] : /^Sem squad/.test(l0)), 'Placar: a primeira barra é o squad onde o ganho estimado se concentra', `${l0} · maior: ${top && top[0]}`); }
         ok(document.getElementById('ia-graf-placar') && /Recomendações da IA/.test(txt('sec-ia')) && semRolagem() && semMotor(), 'Placar: onde está o ganho e as recomendações da IA na mesma tela, sem rolagem e sem menção a motor');
         irPagina('ia', 2);
         ok(document.querySelectorAll('#pl-tab tbody tr').length === pl.length && txt('pa-lead').includes(U.fmtInt(pot)) && semRolagem(), 'Plano de ação: uma linha por squad e o mesmo total do placar, sem rolagem', `${document.querySelectorAll('#pl-tab tbody tr').length} vs ${pl.length} · ${txt('pa-lead')}`);
-        ok(/Realizado \(h\/mês·dev\)/.test(document.querySelector('#pl-tab thead').textContent) && /Falta por dev \(h\/mês\)/.test(document.querySelector('#pl-tab thead').textContent), 'Plano de ação: unidade no cabeçalho das colunas de horas');
+        { const ths = [...document.querySelectorAll('#pl-tab thead th')].map(th => th.textContent);
+          ok(ths[0] === 'Tribo' && ths[1] === 'Squad' && ths.includes('Realizado (h/mês·dev)') && ths.includes('Ganho estimado (h/mês)') && !ths.some(t => /Falta por dev|Detratores/.test(t)),
+            'Plano de ação: tribo na primeira coluna, unidade no cabeçalho, sem falta por dev nem detratores', ths.join(' | ')); }
         { // recomendações da IA: um nível só, os números do Placar e do Plano, e a conferência que descarta ação genérica e evidência falsa
           const Rr = UI.recorte(), X = IA.montar(Rr), P = X.payload, gs = P.grupos, somaG = gs.reduce((a, g) => a + g.ganho_conservador_h_mes, 0);
           irPagina('ia', 1); const consPl = parseInt(txt('kpi-cons'), 10); irPagina('ia', 2);
@@ -4230,7 +4256,12 @@ const App = (() => {
           ok(vr && vr.validos.length === 1 && vr.descartados.length === 2 && vr.descartados[0]._falhas.includes('ação genérica') && vr.validos[0].ganho_h_mes.conservador === g1.ganho_conservador_h_mes
             && rd.formato === 2 && rd.acoes.length === 1 && rd.acoes[0].grupo === g1.nome && !/9\.876/.test(rd.resumo) && rd.resumo.includes(U.fmtNum(P.totais.ganho_conservador_h_mes, 1)),
             'IA: a conferência aceita a ação com alvo da referência, descarta a genérica e a evidência que não é do grupo; o ganho e a ação do plano vêm da aplicação; mensagem com número falso é trocada',
-            JSON.stringify(vr && { v: vr.validos.length, d: vr.descartados.map(x => x._falhas), resumo: rd && rd.resumo })); }
+            JSON.stringify(vr && { v: vr.validos.length, d: vr.descartados.map(x => x._falhas), resumo: rd && rd.resumo }));
+          // a recomendação guardada aparece no detalhamento do squad (e some quando não há resultado)
+          const iaAntes = App.projeto.ia; IA.guardar(rd);
+          abrirDetalhe('squad', g1.nome.startsWith('(sem ') ? '(sem)' : g1.nome); const dr = txt('det-ref');
+          ok(/Recomendação da IA/.test(dr) && dr.includes(bom.acao) && document.querySelector('#det-ref [data-op="abrirGap"]'), 'detalhamento do squad: traz a recomendação da IA gerada para o recorte, com atalho para os Gaps', dr.slice(-200));
+          App.projeto.ia = iaAntes; irPara('ia'); irPagina('ia', 2); }
         abrirDetalhe('squad', 'Pedidos'); voltar();
         ok(A.abaAtiva === 'ia' && A.pagina.ia === 2, 'Voltar do detalhamento retorna à tela de origem (Oportunidade › Plano de ação)'); }
       irPara('geral'); irPagina('geral', 1);
